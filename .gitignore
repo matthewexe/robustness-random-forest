@@ -29,3 +29,9 @@ pytest_cache/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Random Forest results
+Random_Forest_Aeon_Univariate/results/

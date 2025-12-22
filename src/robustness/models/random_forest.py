@@ -1,3 +1,4 @@
+from __future__ import annotations
 import abc
 
 from pydantic import BaseModel
@@ -31,33 +32,31 @@ class InternalNode(Node):
         value (float): Threshold value used to split samples at this node.
     """
 
-    low_child: Node
-    high_child: Node
+    low_child: InternalNode | LeafNode
+    high_child: InternalNode | LeafNode
     feature: str
     value: float
 
 
 class LeafNode(Node):
-    def __init__(self, leaf_id: int, label: str):
-        """
-        Initialize a LeafNode.
-
-        Args:
-            leaf_id (int): Unique identifier for the leaf node.
-            label (str): The class label assigned to this leaf node.
-
-        Attributes:
-            leaf_id (int): Unique identifier for the leaf node.
-            label (str): The class label assigned to this leaf node.
-        """
+    """
+    A leaf node in a decision tree representing a final classification.
+    This class represents a terminal node in a decision tree that contains
+    a classification label. Leaf nodes are reached when the tree traversal
+    is complete and no further splits are possible.
+    Attributes:
+        leaf_id (int): Unique identifier for this leaf node.
+        label (str): The classification label assigned to this leaf node.
+    """
 
     leaf_id: int
     label: str
 
 
-class DecisionTree(Node):
+class DecisionTree(InternalNode):
     """
     A decision tree node representing the root of a complete tree structure.
+    Assuming that a decision tree contains at least one internal node.
 
     Attributes:
         tree_id (int): Unique identifier for the decision tree.

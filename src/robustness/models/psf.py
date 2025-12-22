@@ -1,6 +1,5 @@
 from __future__ import annotations
 import abc
-from pathlib import Path
 
 
 class Formula(abc.ABC):
@@ -13,6 +12,12 @@ class Constant(Formula):
     def __init__(self, value: bool) -> None:
         self.__value = value
 
+    def __str__(self) -> str:
+        return str(self.__value)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
     value = property(lambda self: self.__value)
 
 
@@ -22,6 +27,12 @@ class Variable(Formula):
     def __init__(self, name: str) -> None:
         self.__name = name
 
+    def __str__(self) -> str:
+        return str(self.__name)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
     name = property(lambda self: self.__name)
 
 
@@ -30,6 +41,12 @@ class Not(Formula):
 
     def __init__(self, child: Formula) -> None:
         self.__child = child
+
+    def __str__(self) -> str:
+        return f"(not {self.__child})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     child = property(lambda self: self.__child)
 
@@ -47,14 +64,24 @@ class BinaryOperator(Formula, abc.ABC):
 
 
 class And(BinaryOperator):
-    pass
+
+    def __str__(self) -> str:
+        return f"{self.left_child} and {self.right_child}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 class Or(BinaryOperator):
-    pass
+
+    def __str__(self) -> str:
+        return f"({self.left_child}) or {self.right_child}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
-def Or_DM(left_child: Formula, right_child: Formula):
+def Or_DeMorgan(left_child: Formula, right_child: Formula):
     """
     Computes the logical OR of two formulas using De Morgan's law.
 
@@ -92,11 +119,8 @@ class PSF:
     """
 
     def __init__(self, formula_str: str, formula: Formula) -> None:
-        pass
-
-    @classmethod
-    def from_formula_str(cls, formula_str: str) -> PSF:
-        return PSF(formula_str, parse_psf(formula_str))
+        self.formula_str = formula_str
+        self.formula = formula
 
 
 def simplify(f: Formula):
@@ -112,81 +136,3 @@ def simplify(f: Formula):
         return Or(simplify(f.left_child), simplify(f.right_child))
 
     raise TypeError(f"{type(f)} not recognized.")
-
-
-"""
-Partially Satisfiable Formula Grammar
-
-PSF := True | False | VAR | NOT PSF | PSF AND PSF
-NOT := not | Not | ! | ~
-AND := and | And | && | &
-VAR := \\w+
-"""
-
-from lark import Token, Transformer
-
-
-grammar = """
-
-start: dnf
-
-?dnf: term
-    | term OR dnf                   
-
-?term: literal
-     | literal AND term  
-
-?literal: NOT VARIABLE
-        | CONSTANT                  
-        | VARIABLE              
-
-AND.2: "and" | "And" | "AND" | "&&" | "&"
-OR.2:  "or"  | "Or"  | "OR"  | "||" | "|"
-NOT.2: "not" | "Not" | "NOT" | "!" | "~"
-
-CONSTANT.2: "true" | "false"
-VARIABLE: WORD
-
-%import common.WORD
-%import common.WS
-%ignore WS
-%ignore "("
-%ignore ")"
-"""
-
-
-def ast_to_formula(lark_tree) -> Formula:
-    if isinstance(lark_tree, Token):
-        if lark_tree.type == "CONSTANT":
-            return Constant(lark_tree.value == "true")
-        if lark_tree.type == "VARIABLE":
-            return Variable(lark_tree.value)
-    else:
-        if lark_tree.data == "start":
-            return ast_to_formula(lark_tree.children[0])
-        if lark_tree.data == "literal":
-            child = lark_tree.children[0]
-            if child.type == "NOT":
-                child = ast_to_formula(lark_tree.children[1])
-                return Not(child)
-            return ast_to_formula(child)
-        if lark_tree.data in {"term", "dnf"}:
-            if len(lark_tree.children) == 0:
-                return ast_to_formula(lark_tree.children[0])
-            left = ast_to_formula(lark_tree.children[0])
-            right = ast_to_formula(lark_tree.children[2])
-            if lark_tree.data == "term":
-                return And(left, right)
-            else:
-                return Or(left, right)
-
-    raise TypeError(f"Unkown token {lark_tree}")
-
-
-def parse_psf(formula_str: str) -> Formula:
-    import lark as l
-
-    parser = l.Lark(grammar=grammar, parser="lalr")
-
-    lark_tree = parser.parse(formula_str)  # type: ignore
-    return ast_to_formula(lark_tree.children[0])

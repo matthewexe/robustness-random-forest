@@ -18,6 +18,12 @@ class Constant(Formula):
     def __repr__(self) -> str:
         return self.__str__()
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Constant):
+            return False
+
+        return value.value == self.value
+
     value = property(lambda self: self.__value)
 
 
@@ -33,6 +39,12 @@ class Variable(Formula):
     def __repr__(self) -> str:
         return self.__str__()
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Variable):
+            return False
+
+        return value.name == self.name
+
     name = property(lambda self: self.__name)
 
 
@@ -47,6 +59,12 @@ class Not(Formula):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Not):
+            return False
+
+        return value.child == self.child
 
     child = property(lambda self: self.__child)
 
@@ -71,6 +89,15 @@ class And(BinaryOperator):
     def __repr__(self) -> str:
         return self.__str__()
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, And):
+            return False
+
+        return (
+            value.left_child == self.left_child
+            and value.right_child == self.right_child
+        )
+
 
 class Or(BinaryOperator):
 
@@ -79,6 +106,15 @@ class Or(BinaryOperator):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Or):
+            return False
+
+        return (
+            value.left_child == self.left_child
+            and value.right_child == self.right_child
+        )
 
 
 def Or_DeMorgan(left_child: Formula, right_child: Formula):
@@ -121,6 +157,12 @@ class PSF:
     def __init__(self, formula_str: str, formula: Formula) -> None:
         self.formula_str = formula_str
         self.formula = formula
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, PSF):
+            return False
+
+        return value.formula == self.formula
 
 
 def simplify(f: Formula):

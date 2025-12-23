@@ -64,6 +64,17 @@ class InternalNode(Node):
         self.low_child.set_parent(self)
         self.high_child.set_parent(self)
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, InternalNode):
+            return False
+
+        return (
+            value.low_child == self.low_child
+            and value.high_child == self.high_child
+            and value.feature == self.feature
+            and value.value == self.value
+        )
+
 
 class LeafNode(Node):
     """
@@ -89,6 +100,13 @@ class LeafNode(Node):
         self.leaf_id = leaf_id
         self.label = label
 
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, LeafNode)
+            and value.label == self.label
+            and value.leaf_id == self.leaf_id
+        )
+
 
 class DecisionTree:
     """
@@ -108,6 +126,9 @@ class DecisionTree:
         # Force parent to be None
         root.set_parent(None)
         self.root = root
+
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, DecisionTree) and value.tree_id == self.tree_id
 
 
 class RandomForest(list[DecisionTree]):

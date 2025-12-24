@@ -38,5 +38,5 @@ def __dt_internal_to_model(node: InternalNodeSchema) -> InternalNode:
     return InternalNode(low_child, high_child, feature=node.feature, value=node.value)
 
 
-def __dt_leaf_to_model(node: LeafNodeSchema, parent: Node | None = None) -> LeafNode:
+def __dt_leaf_to_model(node: LeafNodeSchema) -> LeafNode:
     return LeafNode(label=node.label, leaf_id=node.leaf_id)

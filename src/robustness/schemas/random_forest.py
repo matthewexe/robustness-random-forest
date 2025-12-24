@@ -69,10 +69,7 @@ RandomForestSchema = list[DecisionTreeSchema]
 
 
 def from_json(json_content: str) -> RandomForestSchema:
-    import json
     from pydantic import TypeAdapter
-
-    obj = json.loads(json_content)
 
     adapter = TypeAdapter(RandomForestSchema)
     return adapter.validate_json(json_content)

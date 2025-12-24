@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+from robustness.domain.bdd import get_bdd_manager
+from robustness.domain.psf.model import Formula, Terminal, Not, And, Or, Variable, Constant, BDD
+
+bdd_manager = get_bdd_manager()
+
+
+def simplify(f: Formula):
+    if isinstance(f, Terminal):
+        return f
+    if isinstance(f, Not) and isinstance(f.child, Not):
+        return f.child.child
+    if isinstance(f, Not):
+        return Not(simplify(f.child))
+    if isinstance(f, And):
+        return And(simplify(f.left_child), simplify(f.right_child))
+    if isinstance(f, Or):
+        return Or(simplify(f.left_child), simplify(f.right_child))
+
+    raise TypeError(f"{type(f)} not recognized.")
+
+
+def let(f: Formula, reduce: bool = False, **assignment) -> Formula:
+    if isinstance(f, Terminal):
+        if isinstance(f, Variable):
+            return Constant(assignment[f.value]) if f.value in assignment else f
+        if isinstance(f, BDD):
+            global bdd_manager
+            assign = {v: assignment[v] for v in f.value.vars if v in assignment}
+            return BDD(bdd_manager.let(assign, f.value))
+
+        return f
+    if isinstance(f, Not):
+        sub_formula = let(f, reduce=reduce, **assignment)
+        if isinstance(sub_formula, Constant) and reduce:
+            return Constant(not sub_formula.value)
+
+        return Not(sub_formula)
+    if isinstance(f, And):
+        left_formula = let(f, reduce=reduce, **assignment)
+        right_formula = let(f, reduce=reduce, **assignment)
+
+        if isinstance(left_formula, Constant) and left_formula.value == False and reduce:
+            return Constant(False)
+        if isinstance(right_formula, Constant) and right_formula.value == False and reduce:
+            return Constant(False)
+        if isinstance(left_formula, Constant) and isinstance(right_formula, Constant) and reduce:
+            if left_formula.value == True and right_formula.value == True:
+                return Constant(True)
+
+        return And(let(f.left_child, reduce=reduce, **assignment), let(f.right_child, reduce=reduce, **assignment))
+    if isinstance(f, Or):
+        left_formula = let(f, reduce=reduce, **assignment)
+        right_formula = let(f, reduce=reduce, **assignment)
+
+        if isinstance(left_formula, Constant) and left_formula.value == True and reduce:
+            return Constant(True)
+        if isinstance(right_formula, Constant) and right_formula.value == True and reduce:
+            return Constant(True)
+        if isinstance(left_formula, Constant) and isinstance(right_formula, Constant) and reduce:
+            if left_formula.value == False and right_formula.value == False:
+                return Constant(False)
+
+        return Or(let(f.left_child, reduce=reduce, **assignment), let(f.right_child, reduce=reduce, **assignment))
+
+    raise TypeError(f"{type(f)} not recognized.")
+
+
+def or_de_morgan(f: Formula):
+    """
+    Computes the logical OR of two formulas using De Morgan's law.
+
+    This function implements OR by negating the AND of the negated operands:
+    OR(A, B) = NOT(AND(NOT(A), NOT(B)))
+
+    Args:
+        left_child (Formula): The left operand formula.
+        right_child (Formula): The right operand formula.
+
+    Returns:
+        Formula: A formula representing the logical OR of the two input formulas.
+
+    Example:
+        >>> result = Or(formula_a, formula_b)
+        >>> # result represents: formula_a OR formula_b
+    """
+    if isinstance(f, Or):
+        return Not(And(Not(f.left_child), Not(f.right_child)))
+    if isinstance(f, Formula):
+        return f
+
+    raise TypeError(f"{type(f)} not recognized.")
+
+
+def partial_reduce(f: Formula, ds: int, assignment: dict) -> tuple[Formula, bool]:
+    global bdd_manager
+    if isinstance(f, Variable):
+        p = f.value
+        bdd = bdd_manager.add_expr(p)
+        if p in assignment:
+            bdd = bdd_manager.let({p: assignment[p]}, bdd)
+            return BDD(bdd), True
+
+        return BDD(bdd), True
+
+    if isinstance(f, BDD):
+        current_bdd = f.value
+        support = bdd_manager.support(current_bdd)
+        assign = {v: assignment[v] for v in support if v in assignment}
+        new_bdd = bdd_manager.let(assign, current_bdd)
+        return BDD(new_bdd), bdd_manager.count(new_bdd) > ds
+
+    if isinstance(f, Not):
+        node, outcome = partial_reduce(f.child, ds, assignment)
+        if isinstance(node, BDD):
+            return BDD(bdd_manager.apply('not', node.value)), outcome
+        return Not(node), False
+
+    if isinstance(f, And):
+        node1, outcome1 = partial_reduce(f.left_child, ds, assignment)
+        node2, outcome2 = partial_reduce(f.right_child, ds, assignment)
+
+        if outcome1 and outcome2:
+            new_bdd = bdd_manager.apply('and', node1.value, node2.value)
+            return BDD(new_bdd), bdd_manager.count(new_bdd) > ds
+
+        return And(node1, node2), False
+
+    raise TypeError(f"{type(f)} not recognized.")

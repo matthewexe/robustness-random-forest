@@ -45,12 +45,18 @@ class Variable(Terminal[str]):
 class BDD(Terminal[dd.autoref.Function]):
     pass
 
+class ClassNode(Terminal[str]):
+    pass
 
-class Not(Formula):
+class UnaryOperator(Formula, abc.ABC):
     __child: Formula
 
     def __init__(self, child: Formula) -> None:
         self.__child = child
+
+    child = property(lambda self: self.__child)
+
+class Not(UnaryOperator):
 
     def __str__(self) -> str:
         return f"(! {self.__child})"
@@ -64,7 +70,6 @@ class Not(Formula):
 
         return value.child == self.child
 
-    child = property(lambda self: self.__child)
 
 
 class BinaryOperator(Formula, abc.ABC):

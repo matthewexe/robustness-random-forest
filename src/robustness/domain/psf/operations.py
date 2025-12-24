@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from robustness.domain.bdd import get_bdd_manager
-from robustness.domain.psf.model import Formula, Terminal, Not, And, Or, Variable, Constant, BDD
+from robustness.domain.psf.model import Formula, Terminal, Not, And, Or, Variable, Constant, BDD, ClassNode
 
 bdd_manager = get_bdd_manager()
 
@@ -10,7 +10,7 @@ def simplify(f: Formula):
     if isinstance(f, Terminal):
         return f
     if isinstance(f, Not) and isinstance(f.child, Not):
-        return f.child.child
+        return simplify(f.child.child)
     if isinstance(f, Not):
         return Not(simplify(f.child))
     if isinstance(f, And):
@@ -67,34 +67,13 @@ def let(f: Formula, reduce: bool = False, **assignment) -> Formula:
     raise TypeError(f"{type(f)} not recognized.")
 
 
-def or_de_morgan(f: Formula):
-    """
-    Computes the logical OR of two formulas using De Morgan's law.
-
-    This function implements OR by negating the AND of the negated operands:
-    OR(A, B) = NOT(AND(NOT(A), NOT(B)))
-
-    Args:
-        left_child (Formula): The left operand formula.
-        right_child (Formula): The right operand formula.
-
-    Returns:
-        Formula: A formula representing the logical OR of the two input formulas.
-
-    Example:
-        >>> result = Or(formula_a, formula_b)
-        >>> # result represents: formula_a OR formula_b
-    """
-    if isinstance(f, Or):
-        return Not(And(Not(f.left_child), Not(f.right_child)))
-    if isinstance(f, Formula):
-        return f
-
-    raise TypeError(f"{type(f)} not recognized.")
-
-
 def partial_reduce(f: Formula, ds: int, assignment: dict) -> tuple[Formula, bool]:
     global bdd_manager
+    if isinstance(f, ClassNode):
+        class_label = f.value
+        bdd = bdd_manager.add_expr(class_label)
+
+        return BDD(bdd), True
     if isinstance(f, Variable):
         p = f.value
         bdd = bdd_manager.add_expr(p)

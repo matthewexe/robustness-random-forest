@@ -1,4 +1,4 @@
-from robustness.domain.psf.model import And, Or, Not, Constant, Formula, Variable
+from robustness.domain.psf.model import And, Or, Not, Constant, Formula, Variable, ClassNode
 
 """
 Partially Satisfiable Formula Grammar
@@ -11,8 +11,7 @@ VAR := \\w+
 
 from lark import Token
 
-
-grammar = """
+grammar = r"""
 
 start: dnf
 
@@ -20,18 +19,21 @@ start: dnf
     | term OR dnf                   
 
 ?term: literal
-     | literal AND term  
+    | literal AND term
 
 ?literal: NOT VARIABLE
         | CONSTANT                  
-        | VARIABLE              
+        | VARIABLE
+        | CLASS              
 
 AND.2: "and" | "And" | "AND" | "&&" | "&"
 OR.2:  "or"  | "Or"  | "OR"  | "||" | "|"
 NOT.2: "not" | "Not" | "NOT" | "!" | "~"
 
+
 CONSTANT.2: "true" | "false"
-VARIABLE: /[a-zA-Z_][a-zA-Z0-9_]*/
+CLASS: /c\d+/
+VARIABLE: /t_\d+/
 
 %import common.WS
 %ignore WS
@@ -46,6 +48,8 @@ def ast_to_formula(lark_tree) -> Formula:
             return Constant(lark_tree.value == "true")
         if lark_tree.type == "VARIABLE":
             return Variable(lark_tree.value)
+        if lark_tree.type == "CLASS":
+            return ClassNode(lark_tree.value)
     else:
         if lark_tree.data == "start":
             return ast_to_formula(lark_tree.children[0])
@@ -65,7 +69,7 @@ def ast_to_formula(lark_tree) -> Formula:
             else:
                 return Or(left, right)
 
-    raise TypeError(f"Unkown token {lark_tree}")
+    raise TypeError(f"Unknown token {lark_tree}")
 
 
 def parse_psf(formula_str: str) -> Formula:

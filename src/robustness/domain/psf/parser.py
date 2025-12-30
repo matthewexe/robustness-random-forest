@@ -1,4 +1,4 @@
-from robustness.domain.psf.model import And, Or, Not, Constant, Formula, Variable, ClassNode
+from robustness.domain.psf.model import And, Or, Not, Constant, PSF, Variable, ClassNode
 
 """
 Partially Satisfiable Formula Grammar
@@ -42,7 +42,7 @@ VARIABLE: /t_\d+/
 """
 
 
-def ast_to_formula(lark_tree) -> Formula:
+def ast_to_formula(lark_tree) -> PSF:
     if isinstance(lark_tree, Token):
         if lark_tree.type == "CONSTANT":
             return Constant(lark_tree.value == "true")
@@ -72,7 +72,7 @@ def ast_to_formula(lark_tree) -> Formula:
     raise TypeError(f"Unknown token {lark_tree}")
 
 
-def parse_psf(formula_str: str) -> Formula:
+def parse_psf(formula_str: str) -> PSF:
     import lark as l
 
     parser = l.Lark(grammar=grammar, parser="lalr")

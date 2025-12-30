@@ -6,14 +6,14 @@ from typing import Generic, TypeVar
 import dd
 
 
-class Formula(abc.ABC):
+class PSF(abc.ABC):
     pass
 
 
 T = TypeVar("T")
 
 
-class Terminal(Formula, Generic[T]):
+class Terminal(PSF, Generic[T]):
     __value: T
 
     def __init__(self, value: T) -> None:
@@ -48,10 +48,10 @@ class BDD(Terminal[dd.autoref.Function]):
 class ClassNode(Terminal[str]):
     pass
 
-class UnaryOperator(Formula, abc.ABC):
-    __child: Formula
+class UnaryOperator(PSF, abc.ABC):
+    __child: PSF
 
-    def __init__(self, child: Formula) -> None:
+    def __init__(self, child: PSF) -> None:
         self.__child = child
 
     child = property(lambda self: self.__child)
@@ -72,11 +72,11 @@ class Not(UnaryOperator):
 
 
 
-class BinaryOperator(Formula, abc.ABC):
-    __left_child: Formula
-    __right_child: Formula
+class BinaryOperator(PSF, abc.ABC):
+    __left_child: PSF
+    __right_child: PSF
 
-    def __init__(self, left_child: Formula, right_child: Formula) -> None:
+    def __init__(self, left_child: PSF, right_child: PSF) -> None:
         self.__left_child = left_child
         self.__right_child = right_child
 
@@ -118,31 +118,3 @@ class Or(BinaryOperator):
                 value.left_child == self.left_child
                 and value.right_child == self.right_child
         )
-
-
-class PSF:
-    """
-    PSF class represents a partially solved formula (PSF).
-
-    Attributes:
-        formula_str (str): A string representation of the formula.
-        formula (Formula): An instance of the Formula class representing the formula.
-
-    Methods:
-        __init__(formula_str: str, formula: Formula) -> None:
-            Initializes a new instance of the PSF class with the given formula string and formula.
-
-        from_formula_str(cls, formula_str: str):
-            Creates a PSF instance from a given formula string.
-    """
-
-    def __init__(self, formula_str: str, formula: Formula, assignment: dict[str, bool] | None = None) -> None:
-        self.formula_str = formula_str
-        self.formula = formula
-        self.assignment = assignment
-
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, PSF):
-            return False
-
-        return value.formula == self.formula

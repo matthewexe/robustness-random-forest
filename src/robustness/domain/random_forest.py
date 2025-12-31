@@ -107,7 +107,6 @@ class LeafNode(Node):
             and value.leaf_id == self.leaf_id
         )
 
-
 class DecisionTree:
     """
     A decision tree node representing the root of a complete tree structure.
@@ -132,4 +131,8 @@ class DecisionTree:
 
 
 class RandomForest(list[DecisionTree]):
+    pass
+
+# Sample used for training
+class Sample(dict):
     pass

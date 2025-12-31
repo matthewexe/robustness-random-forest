@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import abc
+from typing import TypeVar
 
 from pydantic import BaseModel
 
 
+# Random Forest Schema
 class NodeSchema(BaseModel, abc.ABC):
     """
     A Node model representing a node in a tree structure.
@@ -67,9 +70,14 @@ class DecisionTreeSchema(InternalNodeSchema):
 
 RandomForestSchema = list[DecisionTreeSchema]
 
+# Sample Schema
+SampleSchema = dict[str, float]
 
-def from_json(json_content: str) -> RandomForestSchema:
+T = TypeVar("T")
+
+
+def from_json(json_content: str, cls: T) -> T:
     from pydantic import TypeAdapter
 
-    adapter = TypeAdapter(RandomForestSchema)
+    adapter = TypeAdapter(cls)
     return adapter.validate_json(json_content)

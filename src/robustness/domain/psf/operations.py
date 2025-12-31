@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from robustness.domain.bdd import get_bdd_manager
-from robustness.domain.psf.model import PSF, Terminal, Not, And, Or, Variable, Constant, BDD, ClassNode
+from robustness.domain.bdd.manager import get_bdd_manager
+from robustness.domain.bdd.operations import max_occ_var
+from robustness.domain.config import Config
+from robustness.domain.psf.model import PSF, Terminal, Not, And, Variable, Constant, BDD, ClassNode, UnaryOperator, \
+    BinaryOperator
+from robustness.domain.psf.tableau.model import TableauTree, TableauNode
 
 bdd_manager = get_bdd_manager()
 
@@ -15,8 +19,6 @@ def simplify(f: PSF):
         return Not(simplify(f.child))
     if isinstance(f, And):
         return And(simplify(f.left_child), simplify(f.right_child))
-    if isinstance(f, Or):
-        return Or(simplify(f.left_child), simplify(f.right_child))
 
     raise TypeError(f"{type(f)} not recognized.")
 
@@ -27,19 +29,19 @@ def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
             return Constant(assignment[f.value]) if f.value in assignment else f
         if isinstance(f, BDD):
             global bdd_manager
-            assign = {v: assignment[v] for v in f.value.vars if v in assignment}
+            assign = {v: assignment[v] for v in bdd_manager.support(f.value) if v in assignment}
             return BDD(bdd_manager.let(assign, f.value))
 
         return f
     if isinstance(f, Not):
-        sub_formula = let(f, reduce=reduce, **assignment)
+        sub_formula = let(f.child, reduce=reduce, **assignment)
         if isinstance(sub_formula, Constant) and reduce:
             return Constant(not sub_formula.value)
 
         return Not(sub_formula)
     if isinstance(f, And):
-        left_formula = let(f, reduce=reduce, **assignment)
-        right_formula = let(f, reduce=reduce, **assignment)
+        left_formula = let(f.left_child, reduce=reduce, **assignment)
+        right_formula = let(f.right_child, reduce=reduce, **assignment)
 
         if isinstance(left_formula, Constant) and left_formula.value == False and reduce:
             return Constant(False)
@@ -50,25 +52,14 @@ def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
                 return Constant(True)
 
         return And(let(f.left_child, reduce=reduce, **assignment), let(f.right_child, reduce=reduce, **assignment))
-    if isinstance(f, Or):
-        left_formula = let(f, reduce=reduce, **assignment)
-        right_formula = let(f, reduce=reduce, **assignment)
-
-        if isinstance(left_formula, Constant) and left_formula.value == True and reduce:
-            return Constant(True)
-        if isinstance(right_formula, Constant) and right_formula.value == True and reduce:
-            return Constant(True)
-        if isinstance(left_formula, Constant) and isinstance(right_formula, Constant) and reduce:
-            if left_formula.value == False and right_formula.value == False:
-                return Constant(False)
-
-        return Or(let(f.left_child, reduce=reduce, **assignment), let(f.right_child, reduce=reduce, **assignment))
 
     raise TypeError(f"{type(f)} not recognized.")
 
 
-def partial_reduce(f: PSF, diagram_size: int, assignment: dict) -> tuple[PSF, bool]:
+def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     global bdd_manager
+    if assignment is None:
+        assignment = {}
     if isinstance(f, ClassNode):
         class_label = f.value
         bdd = bdd_manager.add_expr(class_label)
@@ -88,22 +79,69 @@ def partial_reduce(f: PSF, diagram_size: int, assignment: dict) -> tuple[PSF, bo
         support = bdd_manager.support(current_bdd)
         assign = {v: assignment[v] for v in support if v in assignment}
         new_bdd = bdd_manager.let(assign, current_bdd)
-        return BDD(new_bdd), bdd_manager.count(new_bdd) > diagram_size
+        return BDD(new_bdd), new_bdd.dag_size <= diagram_size
 
     if isinstance(f, Not):
-        node, outcome = partial_reduce(f.child, diagram_size, assignment)
+        node, outcome = partial_reduce(f.child, diagram_size, **assignment)
         if isinstance(node, BDD):
             return BDD(bdd_manager.apply('not', node.value)), outcome
         return Not(node), False
 
     if isinstance(f, And):
-        node1, outcome1 = partial_reduce(f.left_child, diagram_size, assignment)
-        node2, outcome2 = partial_reduce(f.right_child, diagram_size, assignment)
+        node1, outcome1 = partial_reduce(f.left_child, diagram_size, **assignment)
+        node2, outcome2 = partial_reduce(f.right_child, diagram_size, **assignment)
 
         if outcome1 and outcome2:
             new_bdd = bdd_manager.apply('and', node1.value, node2.value)
-            return BDD(new_bdd), bdd_manager.count(new_bdd) > diagram_size
+            return BDD(new_bdd), new_bdd.dag_size <= diagram_size
 
         return And(node1, node2), False
 
     raise TypeError(f"{type(f)} not recognized.")
+
+
+def bdd_best_var(f: PSF) -> tuple[str, int]:
+    if isinstance(f, Terminal):
+        if isinstance(f, BDD):
+            return max_occ_var(f.value)
+        return "", 0
+    if isinstance(f, UnaryOperator):
+        return bdd_best_var(f.child)
+    if isinstance(f, BinaryOperator):
+        left_var, left_occurrences = bdd_best_var(f.left_child)
+        right_var, right_occurrences = bdd_best_var(f.right_child)
+        if left_occurrences >= right_occurrences:
+            return left_var, left_occurrences
+
+        return right_var, right_occurrences
+
+    raise TypeError(f"{type(f)} not recognized.")
+
+
+def tableau_method(f: PSF, tree: TableauNode | None = None, current_node: TableauNode | None = None) -> TableauTree:
+    if not tree:
+        current_node = current_node or TableauNode(f)
+        tree = TableauTree(current_node)
+    if current_node.is_bdd():
+        return tree
+
+    best_var = None
+    best_var_occ = 0
+    for leaf in tree.root.leaves:
+        leaf_var, leaf_occ = bdd_best_var(leaf.psf)
+        if best_var_occ < leaf_occ:
+            best_var = leaf_var
+            best_var_occ = leaf_occ
+
+    config_cls = Config()
+    best_var_false = {best_var: False}
+    low_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_false)
+    low_node = TableauNode(low_psf, current_node, best_var_false)
+    tableau_method(low_psf, tree, low_node)
+
+    best_var_true = {best_var: True}
+    high_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_true)
+    high_node = TableauNode(low_psf, current_node, best_var_true)
+    tableau_method(high_psf, tree, high_node)
+
+    return tree

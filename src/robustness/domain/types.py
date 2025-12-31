@@ -1,5 +1,6 @@
 from typing import TypeAlias
-from robustness.domain.psf.model import Formula, PSF
+
+from robustness.domain.psf.model import PSF, BDD
 from robustness.domain.random_forest import (
     RandomForest,
     DecisionTree,
@@ -16,5 +17,5 @@ _DT_Leaf_Type: TypeAlias = LeafNode
 _DT_Internal_Type: TypeAlias = InternalNode
 
 # PSF
-_Formula_Type: TypeAlias = Formula
 _PSF_Type: TypeAlias = PSF
+_PSF_BDD_Type: TypeAlias = BDD

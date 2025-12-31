@@ -32,6 +32,7 @@ Thumbs.db
 
 # Jupyter Notebook
 .ipynb_checkpoints
+tests/*.ipynb
 
 # Random Forest results
 Random_Forest_Aeon_Univariate/results/

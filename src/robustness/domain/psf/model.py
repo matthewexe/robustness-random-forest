@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from typing import Generic, TypeVar
 
-import dd
+from robustness.domain.bdd import DD_Function
 
 
 class PSF(abc.ABC):
@@ -42,24 +42,27 @@ class Variable(Terminal[str]):
     pass
 
 
-class BDD(Terminal[dd.autoref.Function]):
-    pass
+class BDD(Terminal[DD_Function]):
+    __count: dict[str, int]
+
 
 class ClassNode(Terminal[str]):
     pass
 
+
 class UnaryOperator(PSF, abc.ABC):
-    __child: PSF
+    _child: PSF
 
     def __init__(self, child: PSF) -> None:
-        self.__child = child
+        self._child = child
 
-    child = property(lambda self: self.__child)
+    child = property(lambda self: self._child)
+
 
 class Not(UnaryOperator):
 
     def __str__(self) -> str:
-        return f"(! {self.__child})"
+        return f"(! {self._child})"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -69,7 +72,6 @@ class Not(UnaryOperator):
             return False
 
         return value.child == self.child
-
 
 
 class BinaryOperator(PSF, abc.ABC):
@@ -101,20 +103,32 @@ class And(BinaryOperator):
                 and value.right_child == self.right_child
         )
 
+def Or(left_child: PSF, right_child: PSF) -> PSF:
+    """
+    De Morgan rule.
+        a | b = !(!a & !b)
+    Args:
+        left_child:
+        right_child:
 
-class Or(BinaryOperator):
+    Returns:
 
-    def __str__(self) -> str:
-        return f"({self.left_child}) || {self.right_child}"
+    """
+    return Not(And(Not(left_child), Not(right_child)))
 
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, Or):
-            return False
-
-        return (
-                value.left_child == self.left_child
-                and value.right_child == self.right_child
-        )
+# class Or(BinaryOperator):
+#
+#     def __str__(self) -> str:
+#         return f"({self.left_child}) || {self.right_child}"
+#
+#     def __repr__(self) -> str:
+#         return self.__str__()
+#
+#     def __eq__(self, value: object) -> bool:
+#         if not isinstance(value, Or):
+#             return False
+#
+#         return (
+#                 value.left_child == self.left_child
+#                 and value.right_child == self.right_child
+#         )

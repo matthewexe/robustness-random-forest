@@ -141,7 +141,7 @@ def tableau_method(f: PSF, tree: TableauNode | None = None, current_node: Tablea
 
     best_var_true = {best_var: True}
     high_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_true)
-    high_node = TableauNode(low_psf, current_node, best_var_true)
+    high_node = TableauNode(high_psf, current_node, best_var_true)
     tableau_method(high_psf, tree, high_node)
 
     return tree

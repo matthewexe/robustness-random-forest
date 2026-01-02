@@ -62,7 +62,7 @@ def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
 
 def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     global bdd_manager
-    logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}")
+    logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}, {assignment=}")
     if assignment is None:
         assignment = {}
     if isinstance(f, ClassNode):

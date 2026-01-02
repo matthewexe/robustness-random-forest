@@ -8,6 +8,7 @@ This module provides a configured logger with dual output:
 
 import json
 import logging
+import os
 import sys
 from typing import Optional
 
@@ -16,11 +17,7 @@ from typing import Optional
 CLASSIC_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 CLASSIC_LOG_LEVEL = logging.INFO
 
-# Detailed logging configuration (DEBUG level with function, line number, etc.)
-DETAILED_LOG_FORMAT = (
-    "%(asctime)s - %(name)s - %(levelname)s - "
-    "%(filename)s:%(lineno)d - %(funcName)s() - %(message)s"
-)
+# Detailed logging configuration (DEBUG level)
 DETAILED_LOG_LEVEL = logging.DEBUG
 
 # Default log file path
@@ -97,7 +94,6 @@ def get_logger(name: Optional[str] = None, log_file: str = DEFAULT_LOG_FILE) -> 
     # Add detailed JSON file handler if it doesn't exist
     if not has_file_handler:
         # Create parent directory if it doesn't exist
-        import os
         log_dir = os.path.dirname(log_file)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
@@ -119,7 +115,6 @@ __all__ = [
     "get_logger",
     "CLASSIC_LOG_FORMAT",
     "CLASSIC_LOG_LEVEL",
-    "DETAILED_LOG_FORMAT",
     "DETAILED_LOG_LEVEL",
     "JSONFormatter",
 ]

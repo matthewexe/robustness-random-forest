@@ -27,8 +27,12 @@ def _configure_stdout_handler(
         level: The logging level (default: INFO)
         log_format: The format string for log messages
     """
-    # Check if handler already exists to avoid duplicates
-    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+    # Check if stdout handler already exists to avoid duplicates
+    has_stdout_handler = any(
+        isinstance(h, logging.StreamHandler) and h.stream == sys.stdout
+        for h in logger.handlers
+    )
+    if not has_stdout_handler:
         handler = logging.StreamHandler(sys.stdout)
         handler.setLevel(level)
         formatter = logging.Formatter(log_format)

@@ -9,8 +9,6 @@ from robustness.domain.bdd import DD_Function
 
 
 class PSF(abc.ABC, NodeMixin):
-    _variables: set[str]
-    _classes: set[str]
 
     def __init__(self, parent=None):
         self.parent = parent
@@ -20,25 +18,28 @@ T = TypeVar("T")
 
 
 class Terminal(PSF, Generic[T]):
-    __value: T
+    _value: T
 
     def __init__(self, value: T, parent=None) -> None:
         super().__init__(parent)
-        self.__value = value
+        self._value = value
 
     def __str__(self) -> str:
-        return str(self.__value)
+        return str(self._value)
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __hash__(self):
+        return hash(self._value)
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Terminal):
             return False
 
-        return value.value == self.value
+        return value._value == self._value
 
-    value = property(lambda self: self.__value)
+    value = property(lambda self: self._value)
 
 
 class Constant(Terminal[bool]):
@@ -73,6 +74,9 @@ class UnaryOperator(PSF, abc.ABC):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __hash__(self):
+        return hash((self._op_str, self.child))
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, UnaryOperator):
@@ -111,6 +115,9 @@ class BinaryOperator(PSF, abc.ABC):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __hash__(self):
+        return hash((self._op_str, self._left_child, self.right_child))
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, BinaryOperator):

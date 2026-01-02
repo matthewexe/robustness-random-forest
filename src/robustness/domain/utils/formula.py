@@ -51,8 +51,9 @@ def or_de_morgan(f: PSF):
 
 def filter_variables(variables: Iterable[str]) -> set[str]:
     config = Config()
-    filtered = {var for var in variables if var.startswith(config.prefix_var)}
-    logger.debug(f"Filtered {len(filtered)} variables out of {len(list(variables))} with prefix '{config.prefix_var}'")
+    variables_list = list(variables)
+    filtered = {var for var in variables_list if var.startswith(config.prefix_var)}
+    logger.debug(f"Filtered {len(filtered)} variables out of {len(variables_list)} with prefix '{config.prefix_var}'")
     return filtered
 
 

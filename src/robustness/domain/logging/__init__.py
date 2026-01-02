@@ -21,85 +21,66 @@ DETAILED_LOG_FORMAT = (
 DETAILED_LOG_LEVEL = logging.DEBUG
 
 
-def _configure_stdout_handler(
-    logger: logging.Logger,
-    level: int,
-    log_format: str
-) -> None:
-    """
-    Configure a stdout handler for the logger.
-
-    Args:
-        logger: The logger instance to configure
-        level: The logging level
-        log_format: The format string for log messages
-    """
-    # Check if stdout handler already exists to avoid duplicates
-    has_stdout_handler = any(
-        isinstance(h, logging.StreamHandler) and h.stream == sys.stdout
-        for h in logger.handlers
-    )
-    if not has_stdout_handler:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(level)
-        formatter = logging.Formatter(log_format)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(level)
-
-
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Get a logger with classic stdout configuration.
+    Get a logger with both classic and detailed stdout handlers.
 
     This is a wrapper around logging.getLogger that automatically
-    configures the logger with a stdout handler using classic format.
-
-    Classic format: INFO level with timestamp, name, level, and message.
+    configures the logger with two stdout handlers:
+    1. Classic handler: INFO level with timestamp, name, level, and message
+    2. Detailed handler: DEBUG level with additional info like filename,
+       line number, and function name for debugging
 
     Args:
         name: The name of the logger. If None, returns the root logger.
 
     Returns:
-        A configured logger instance with classic format
+        A configured logger instance with both classic and detailed handlers
 
     Example:
         >>> logger = get_logger("my_module")
-        >>> logger.info("Processing started")
+        >>> logger.info("Processing started")  # Output in both formats
+        >>> logger.debug("Debug info")  # Only in detailed format (DEBUG level)
     """
     logger = logging.getLogger(name)
-    _configure_stdout_handler(logger, CLASSIC_LOG_LEVEL, CLASSIC_LOG_FORMAT)
-    return logger
-
-
-def get_detailed_logger(name: Optional[str] = None) -> logging.Logger:
-    """
-    Get a logger with detailed stdout configuration.
-
-    This is a wrapper around logging.getLogger that automatically
-    configures the logger with a stdout handler using detailed format.
-
-    Detailed format: DEBUG level with additional info like filename,
-    line number, and function name for debugging.
-
-    Args:
-        name: The name of the logger. If None, returns the root logger.
-
-    Returns:
-        A configured logger instance with detailed format
-
-    Example:
-        >>> logger = get_detailed_logger("my_module")
-        >>> logger.debug("Detailed debugging information")
-    """
-    logger = logging.getLogger(name)
-    _configure_stdout_handler(logger, DETAILED_LOG_LEVEL, DETAILED_LOG_FORMAT)
+    
+    # Check if handlers already exist to avoid duplicates
+    has_classic_handler = False
+    has_detailed_handler = False
+    
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+            formatter_str = handler.formatter._fmt if handler.formatter else ""
+            if CLASSIC_LOG_FORMAT in formatter_str:
+                has_classic_handler = True
+            elif DETAILED_LOG_FORMAT in formatter_str:
+                has_detailed_handler = True
+    
+    # Add classic handler if it doesn't exist
+    if not has_classic_handler:
+        classic_handler = logging.StreamHandler(sys.stdout)
+        classic_handler.setLevel(CLASSIC_LOG_LEVEL)
+        classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
+        classic_handler.setFormatter(classic_formatter)
+        logger.addHandler(classic_handler)
+    
+    # Add detailed handler if it doesn't exist
+    if not has_detailed_handler:
+        detailed_handler = logging.StreamHandler(sys.stdout)
+        detailed_handler.setLevel(DETAILED_LOG_LEVEL)
+        detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
+        detailed_handler.setFormatter(detailed_formatter)
+        logger.addHandler(detailed_handler)
+    
+    # Set logger level to DEBUG to allow all messages through
+    # (handlers will filter based on their own levels)
+    logger.setLevel(logging.DEBUG)
+    
     return logger
 
 
 __all__ = [
     "get_logger",
-    "get_detailed_logger",
     "CLASSIC_LOG_FORMAT",
     "CLASSIC_LOG_LEVEL",
     "DETAILED_LOG_FORMAT",

@@ -5,6 +5,9 @@ from typing import Iterable
 from robustness.domain.config import Config
 from robustness.domain.psf.model import PSF, Or, Not, And, Variable, Terminal, UnaryOperator, BinaryOperator, \
     ClassNode
+from robustness.domain.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def is_feature(value: str) -> bool:
@@ -48,14 +51,18 @@ def or_de_morgan(f: PSF):
 
 def filter_variables(variables: Iterable[str]) -> set[str]:
     config = Config()
-    return {var for var in variables if var.startswith(config.prefix_var)}
+    filtered = {var for var in variables if var.startswith(config.prefix_var)}
+    logger.debug(f"Filtered {len(filtered)} variables out of {len(list(variables))} with prefix '{config.prefix_var}'")
+    return filtered
 
 
 def get_variables(formula: PSF) -> set[str]:
+    logger.debug(f"Extracting variables from formula type {type(formula).__name__}")
     if isinstance(formula, Terminal):
         if isinstance(formula, Variable):
             s = set()
             s.add(formula.value)
+            logger.debug(f"Found variable: {formula.value}")
             return s
         return set()
     if isinstance(formula, UnaryOperator):
@@ -67,10 +74,12 @@ def get_variables(formula: PSF) -> set[str]:
 
 
 def get_classes(formula: PSF) -> set[str]:
+    logger.debug(f"Extracting classes from formula type {type(formula).__name__}")
     if isinstance(formula, Terminal):
         if isinstance(formula, ClassNode):
             s = set()
             s.add(formula.value)
+            logger.debug(f"Found class: {formula.value}")
             return s
         return set()
     if isinstance(formula, UnaryOperator):

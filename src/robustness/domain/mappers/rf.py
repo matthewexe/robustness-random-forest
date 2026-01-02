@@ -4,6 +4,9 @@ from robustness.domain.types import (
     _DT_Internal_Type,
     _DT_Leaf_Type,
 )
+from robustness.domain.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # def rf_to_formula_tree(rf: _RF_Type) -> _Formula_Type:
@@ -47,12 +50,16 @@ from robustness.domain.types import (
 
 
 def rf_to_formula_str(rf: _RF_Type) -> str:
+    logger.info(f"Converting random forest with {len(rf)} trees to formula string")
     groups = [c for tree in rf for c in dt_to_formula_str(tree.root)]
     and_expr = [" and ".join(reversed(group)) for group in groups]
-    return "(" + (") or (".join(and_expr)) + ")"
+    formula = "(" + (") or (".join(and_expr)) + ")"
+    logger.debug(f"Generated formula string with {len(groups)} groups and length {len(formula)}")
+    return formula
 
 
 def dt_to_formula_str(root: _DT_Node_Type) -> list[list[str]]:
+    logger.debug(f"Converting decision tree node to formula string")
     if isinstance(root, _DT_Internal_Type):
         low_child_path_conditions = dt_to_formula_str(root.low_child)
         low_condition = f"(not {root.feature})"

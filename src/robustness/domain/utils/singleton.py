@@ -1,3 +1,8 @@
+from robustness.domain.logging import get_logger
+
+logger = get_logger(__name__)
+
+
 class SingletonMeta(type):
     """
     The Singleton class can be implemented in different ways in Python. Some
@@ -13,8 +18,11 @@ class SingletonMeta(type):
         the returned instance.
         """
         if cls not in cls._instances:
+            logger.debug(f"Creating new singleton instance for {cls.__name__}")
             instance = super().__call__(*args, **kwargs)
             cls._instances[cls] = instance
+        else:
+            logger.debug(f"Returning existing singleton instance for {cls.__name__}")
         return cls._instances[cls]
 
 

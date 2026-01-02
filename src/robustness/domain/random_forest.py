@@ -1,6 +1,10 @@
 from __future__ import annotations
 import abc
 
+from robustness.domain.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class Node(abc.ABC):
     """
@@ -55,6 +59,7 @@ class InternalNode(Node):
         parent: Node | None = None,
     ) -> None:
         super().__init__(parent)
+        logger.debug(f"Creating InternalNode: feature={feature}, value={value}")
         self.low_child = low_child
         self.high_child = high_child
         self.feature = feature
@@ -97,6 +102,7 @@ class LeafNode(Node):
         parent: Node | None = None,
     ) -> None:
         super().__init__(parent)
+        logger.debug(f"Creating LeafNode: leaf_id={leaf_id}, label={label}")
         self.leaf_id = leaf_id
         self.label = label
 
@@ -120,6 +126,7 @@ class DecisionTree:
     root: Node
 
     def __init__(self, tree_id: int, root: Node) -> None:
+        logger.debug(f"Creating DecisionTree with tree_id={tree_id}")
         self.tree_id = tree_id
 
         # Force parent to be None

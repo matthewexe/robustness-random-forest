@@ -6,11 +6,14 @@ from robustness.domain.config import Config
 from robustness.domain.psf.model import PSF, Terminal, Not, And, Variable, Constant, BDD, ClassNode, UnaryOperator, \
     BinaryOperator
 from robustness.domain.psf.tableau.model import TableauTree, TableauNode
+from robustness.domain.logging import get_logger
 
+logger = get_logger(__name__)
 bdd_manager = get_bdd_manager()
 
 
 def simplify(f: PSF):
+    logger.debug(f"Simplifying PSF formula of type {type(f).__name__}")
     if isinstance(f, Terminal):
         return f
     if isinstance(f, Not) and isinstance(f.child, Not):
@@ -24,6 +27,7 @@ def simplify(f: PSF):
 
 
 def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
+    logger.debug(f"Applying let operation with {len(assignment)} assignments, reduce={reduce}")
     if isinstance(f, Terminal):
         if isinstance(f, Variable):
             return Constant(assignment[f.value]) if f.value in assignment else f
@@ -58,6 +62,7 @@ def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
 
 def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     global bdd_manager
+    logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}")
     if assignment is None:
         assignment = {}
     if isinstance(f, ClassNode):
@@ -101,6 +106,7 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
 
 
 def bdd_best_var(f: PSF) -> tuple[str, int]:
+    logger.debug(f"Finding best variable in BDD for type {type(f).__name__}")
     if isinstance(f, Terminal):
         if isinstance(f, BDD):
             return max_occ_var(f.value)
@@ -119,10 +125,13 @@ def bdd_best_var(f: PSF) -> tuple[str, int]:
 
 
 def tableau_method(f: PSF, tree: TableauNode | None = None, current_node: TableauNode | None = None) -> TableauTree:
+    logger.debug(f"Applying tableau method on PSF type {type(f).__name__}")
     if not tree:
+        logger.info("Creating new tableau tree")
         current_node = current_node or TableauNode(f)
         tree = TableauTree(current_node)
     if current_node.is_bdd():
+        logger.debug("Current node is BDD, returning tree")
         return tree
 
     best_var = None
@@ -132,16 +141,21 @@ def tableau_method(f: PSF, tree: TableauNode | None = None, current_node: Tablea
         if best_var_occ < leaf_occ:
             best_var = leaf_var
             best_var_occ = leaf_occ
+    
+    logger.debug(f"Best variable found: {best_var} with {best_var_occ} occurrences")
 
     config_cls = Config()
     best_var_false = {best_var: False}
+    logger.debug(f"Processing low branch with {best_var}=False")
     low_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_false)
     low_node = TableauNode(low_psf, current_node, best_var_false)
     tableau_method(low_psf, tree, low_node)
 
     best_var_true = {best_var: True}
+    logger.debug(f"Processing high branch with {best_var}=True")
     high_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_true)
     high_node = TableauNode(high_psf, current_node, best_var_true)
     tableau_method(high_psf, tree, high_node)
-
+    
+    logger.debug("Tableau method completed for current node")
     return tree

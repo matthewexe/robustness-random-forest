@@ -8,6 +8,7 @@ from io import StringIO
 
 from robustness.domain.logging import (
     get_logger,
+    LevelBasedFormatter,
     CLASSIC_LOG_FORMAT,
     CLASSIC_LOG_LEVEL,
     DETAILED_LOG_FORMAT,
@@ -28,58 +29,32 @@ def test_get_logger_with_name():
     assert logger.name == logger_name
 
 
-def test_get_logger_has_two_handlers():
-    """Test that get_logger configures two stdout handlers."""
-    logger = get_logger("test_two_handlers")
+def test_get_logger_has_one_handler():
+    """Test that get_logger configures one stdout handler."""
+    logger = get_logger("test_one_handler")
     
     # Check that we have stdout handlers
     stream_handlers = [h for h in logger.handlers if isinstance(h, logging.StreamHandler)]
-    assert len(stream_handlers) >= 2  # Should have at least 2 handlers
+    assert len(stream_handlers) >= 1  # Should have at least 1 handler
     
-    # Check that handlers write to stdout
+    # Check that handler writes to stdout
     for handler in stream_handlers:
         assert handler.stream == sys.stdout
 
 
-def test_get_logger_has_classic_and_detailed_handlers():
-    """Test that get_logger has both classic and detailed format handlers."""
-    logger = get_logger("test_both_formats")
+def test_get_logger_handler_uses_level_based_formatter():
+    """Test that get_logger uses LevelBasedFormatter."""
+    logger = get_logger("test_formatter")
     
-    # Find handlers by their custom type attribute
-    classic_handlers = []
-    detailed_handlers = []
-    
+    # Find our custom handler
+    found_formatter = False
     for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
-            if handler._handler_type == 'classic':
-                classic_handlers.append(handler)
-            elif handler._handler_type == 'detailed':
-                detailed_handlers.append(handler)
+        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_is_level_based_handler'):
+            assert isinstance(handler.formatter, LevelBasedFormatter)
+            found_formatter = True
+            break
     
-    assert len(classic_handlers) >= 1, "Should have at least one classic handler"
-    assert len(detailed_handlers) >= 1, "Should have at least one detailed handler"
-
-
-def test_get_logger_classic_handler_uses_info_level():
-    """Test that the classic handler uses INFO level."""
-    logger = get_logger("test_classic_level")
-    
-    # Find classic handler by custom type attribute
-    for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
-            if handler._handler_type == 'classic':
-                assert handler.level == logging.INFO
-
-
-def test_get_logger_detailed_handler_uses_debug_level():
-    """Test that the detailed handler uses DEBUG level."""
-    logger = get_logger("test_detailed_level")
-    
-    # Find detailed handler by custom type attribute
-    for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
-            if handler._handler_type == 'detailed':
-                assert handler.level == logging.DEBUG
+    assert found_formatter, "Should have handler with LevelBasedFormatter"
 
 
 def test_get_logger_sets_logger_to_debug():
@@ -100,30 +75,20 @@ def test_get_logger_no_duplicate_handlers():
     assert initial_handler_count == final_handler_count
 
 
-def test_logger_outputs_both_formats():
-    """Test that the logger outputs in both formats for INFO level."""
+def test_logger_info_uses_classic_format():
+    """Test that INFO messages use classic format."""
     # Capture stdout
     captured_output = StringIO()
     test_message = "Test info message"
     
-    # Create a logger and replace handlers with our capture
-    logger = logging.getLogger("test_both_outputs")
+    # Create a logger with custom handler for testing
+    logger = logging.getLogger("test_info_classic")
     logger.handlers.clear()  # Clear any existing handlers
     
-    # Add classic handler
-    classic_handler = logging.StreamHandler(captured_output)
-    classic_handler.setLevel(logging.INFO)
-    classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
-    classic_handler.setFormatter(classic_formatter)
-    logger.addHandler(classic_handler)
-    
-    # Add detailed handler
-    detailed_handler = logging.StreamHandler(captured_output)
-    detailed_handler.setLevel(logging.DEBUG)
-    detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
-    detailed_handler.setFormatter(detailed_formatter)
-    logger.addHandler(detailed_handler)
-    
+    handler = logging.StreamHandler(captured_output)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(LevelBasedFormatter())
+    logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     
     # Log an info message
@@ -131,40 +96,30 @@ def test_logger_outputs_both_formats():
     
     output = captured_output.getvalue()
     
-    # The message should appear twice - once in classic format, once in detailed
-    # Count occurrences of the test message
-    message_count = output.count(test_message)
-    assert message_count == 2, f"Expected message to appear twice, but appeared {message_count} times"
-    
-    # Check that both formats are present
+    # The message should appear once in classic format
+    assert test_message in output
+    assert output.count(test_message) == 1, "Message should appear exactly once"
     assert "INFO" in output
-    assert "test_both_outputs" in output
+    
+    # Classic format should NOT include filename:lineno or funcName
+    assert "test_logging.py:" not in output  # filename:lineno pattern
+    assert "test_logger_info_uses_classic_format()" not in output  # funcName
 
 
-def test_logger_debug_only_in_detailed():
-    """Test that DEBUG messages only appear in detailed format."""
+def test_logger_debug_uses_detailed_format():
+    """Test that DEBUG messages use detailed format."""
     # Capture stdout
     captured_output = StringIO()
     test_message = "Test debug message"
     
-    # Create a logger and replace handlers with our capture
+    # Create a logger with custom handler for testing
     logger = logging.getLogger("test_debug_detailed")
     logger.handlers.clear()  # Clear any existing handlers
     
-    # Add classic handler (INFO level - should NOT show DEBUG)
-    classic_handler = logging.StreamHandler(captured_output)
-    classic_handler.setLevel(logging.INFO)
-    classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
-    classic_handler.setFormatter(classic_formatter)
-    logger.addHandler(classic_handler)
-    
-    # Add detailed handler (DEBUG level - should show DEBUG)
-    detailed_handler = logging.StreamHandler(captured_output)
-    detailed_handler.setLevel(logging.DEBUG)
-    detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
-    detailed_handler.setFormatter(detailed_formatter)
-    logger.addHandler(detailed_handler)
-    
+    handler = logging.StreamHandler(captured_output)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(LevelBasedFormatter())
+    logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     
     # Log a debug message
@@ -172,13 +127,75 @@ def test_logger_debug_only_in_detailed():
     
     output = captured_output.getvalue()
     
-    # The message should appear once - only in detailed format
-    message_count = output.count(test_message)
-    assert message_count == 1, f"Expected message to appear once (detailed only), but appeared {message_count} times"
-    
-    # Check that detailed format markers are present
+    # The message should appear once in detailed format
+    assert test_message in output
+    assert output.count(test_message) == 1, "Message should appear exactly once"
     assert "DEBUG" in output
-    assert "test_logging.py:" in output  # filename:lineno pattern from detailed format
+    
+    # Detailed format should include filename:lineno and funcName
+    assert "test_logging.py:" in output  # filename:lineno pattern
+    assert "test_logger_debug_uses_detailed_format" in output  # funcName
+
+
+def test_logger_warning_uses_classic_format():
+    """Test that WARNING messages use classic format."""
+    # Capture stdout
+    captured_output = StringIO()
+    test_message = "Test warning message"
+    
+    # Create a logger with custom handler for testing
+    logger = logging.getLogger("test_warning_classic")
+    logger.handlers.clear()  # Clear any existing handlers
+    
+    handler = logging.StreamHandler(captured_output)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(LevelBasedFormatter())
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    
+    # Log a warning message
+    logger.warning(test_message)
+    
+    output = captured_output.getvalue()
+    
+    # The message should appear once in classic format
+    assert test_message in output
+    assert output.count(test_message) == 1, "Message should appear exactly once"
+    assert "WARNING" in output
+    
+    # Classic format should NOT include filename:lineno or funcName
+    assert "test_logging.py:" not in output  # filename:lineno pattern
+    assert "test_logger_warning_uses_classic_format()" not in output  # funcName
+
+
+def test_level_based_formatter():
+    """Test the LevelBasedFormatter directly."""
+    formatter = LevelBasedFormatter()
+    
+    # Create DEBUG record
+    debug_record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="test.py",
+        lineno=42, msg="Debug message", args=(), exc_info=None,
+        func="test_func"
+    )
+    
+    # Create INFO record
+    info_record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="test.py",
+        lineno=42, msg="Info message", args=(), exc_info=None,
+        func="test_func"
+    )
+    
+    debug_output = formatter.format(debug_record)
+    info_output = formatter.format(info_record)
+    
+    # DEBUG should have detailed format
+    assert "test.py:42" in debug_output
+    assert "test_func()" in debug_output
+    
+    # INFO should have classic format (no filename:lineno or funcName)
+    assert "test.py:42" not in info_output
+    assert "test_func()" not in info_output
 
 
 def test_constant_values():

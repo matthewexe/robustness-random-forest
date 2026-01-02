@@ -21,62 +21,69 @@ DETAILED_LOG_FORMAT = (
 DETAILED_LOG_LEVEL = logging.DEBUG
 
 
+class LevelBasedFormatter(logging.Formatter):
+    """
+    Custom formatter that uses different formats based on log level.
+    
+    - DEBUG level: detailed format with filename, line number, and function name
+    - INFO and above: classic format with basic information
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
+        self.detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
+    
+    def format(self, record):
+        """Format the log record using appropriate formatter based on level."""
+        if record.levelno == logging.DEBUG:
+            return self.detailed_formatter.format(record)
+        else:
+            return self.classic_formatter.format(record)
+
+
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Get a logger with both classic and detailed stdout handlers.
+    Get a logger with level-based format configuration.
 
     This is a wrapper around logging.getLogger that automatically
-    configures the logger with two stdout handlers:
-    1. Classic handler: INFO level with timestamp, name, level, and message
-    2. Detailed handler: DEBUG level with additional info like filename,
-       line number, and function name for debugging
+    configures the logger with a stdout handler that uses different
+    formats based on the log level:
+    - DEBUG level: detailed format with filename, line number, and function name
+    - INFO and above: classic format with timestamp, name, level, and message
 
     Args:
         name: The name of the logger. If None, returns the root logger.
 
     Returns:
-        A configured logger instance with both classic and detailed handlers
+        A configured logger instance with level-based formatting
 
     Example:
         >>> logger = get_logger("my_module")
-        >>> logger.info("Processing started")  # Output in both formats
-        >>> logger.debug("Debug info")  # Only in detailed format (DEBUG level)
+        >>> logger.info("Processing started")  # Classic format
+        >>> logger.debug("Debug info")  # Detailed format
     """
     logger = logging.getLogger(name)
     
-    # Check if handlers already exist to avoid duplicates
-    has_classic_handler = False
-    has_detailed_handler = False
+    # Check if our custom handler already exists to avoid duplicates
+    has_custom_handler = False
     
     for handler in logger.handlers:
         if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
-            # Use custom attribute to identify handler type
-            if hasattr(handler, '_handler_type'):
-                if handler._handler_type == 'classic':
-                    has_classic_handler = True
-                elif handler._handler_type == 'detailed':
-                    has_detailed_handler = True
+            # Use custom attribute to identify our handler
+            if hasattr(handler, '_is_level_based_handler'):
+                has_custom_handler = True
+                break
     
-    # Add classic handler if it doesn't exist
-    if not has_classic_handler:
-        classic_handler = logging.StreamHandler(sys.stdout)
-        classic_handler.setLevel(CLASSIC_LOG_LEVEL)
-        classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
-        classic_handler.setFormatter(classic_formatter)
-        classic_handler._handler_type = 'classic'  # Custom attribute for identification
-        logger.addHandler(classic_handler)
-    
-    # Add detailed handler if it doesn't exist
-    if not has_detailed_handler:
-        detailed_handler = logging.StreamHandler(sys.stdout)
-        detailed_handler.setLevel(DETAILED_LOG_LEVEL)
-        detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
-        detailed_handler.setFormatter(detailed_formatter)
-        detailed_handler._handler_type = 'detailed'  # Custom attribute for identification
-        logger.addHandler(detailed_handler)
+    # Add handler if it doesn't exist
+    if not has_custom_handler:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.DEBUG)  # Allow all levels through
+        handler.setFormatter(LevelBasedFormatter())
+        handler._is_level_based_handler = True  # Custom attribute for identification
+        logger.addHandler(handler)
     
     # Set logger level to DEBUG to allow all messages through
-    # (handlers will filter based on their own levels)
     logger.setLevel(logging.DEBUG)
     
     return logger

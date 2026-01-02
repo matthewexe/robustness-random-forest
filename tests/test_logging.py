@@ -97,8 +97,9 @@ def test_logger_classic_output_format():
     assert "INFO" in output
     assert "test_classic_output_logger" in output
     # Classic format should NOT include filename, lineno, or funcName
-    assert "::" not in output  # filename:lineno separator
-    assert "test_logging.py" not in output
+    # The detailed format has filename:lineno pattern, classic should not
+    assert "test_logging.py:" not in output  # filename:lineno pattern
+    assert "test_logger_classic_output_format()" not in output  # funcName
 
 
 def test_logger_detailed_output_format():

@@ -50,11 +50,12 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     
     for handler in logger.handlers:
         if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
-            formatter_str = handler.formatter._fmt if handler.formatter else ""
-            if CLASSIC_LOG_FORMAT in formatter_str:
-                has_classic_handler = True
-            elif DETAILED_LOG_FORMAT in formatter_str:
-                has_detailed_handler = True
+            # Use custom attribute to identify handler type
+            if hasattr(handler, '_handler_type'):
+                if handler._handler_type == 'classic':
+                    has_classic_handler = True
+                elif handler._handler_type == 'detailed':
+                    has_detailed_handler = True
     
     # Add classic handler if it doesn't exist
     if not has_classic_handler:
@@ -62,6 +63,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         classic_handler.setLevel(CLASSIC_LOG_LEVEL)
         classic_formatter = logging.Formatter(CLASSIC_LOG_FORMAT)
         classic_handler.setFormatter(classic_formatter)
+        classic_handler._handler_type = 'classic'  # Custom attribute for identification
         logger.addHandler(classic_handler)
     
     # Add detailed handler if it doesn't exist
@@ -70,6 +72,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         detailed_handler.setLevel(DETAILED_LOG_LEVEL)
         detailed_formatter = logging.Formatter(DETAILED_LOG_FORMAT)
         detailed_handler.setFormatter(detailed_formatter)
+        detailed_handler._handler_type = 'detailed'  # Custom attribute for identification
         logger.addHandler(detailed_handler)
     
     # Set logger level to DEBUG to allow all messages through

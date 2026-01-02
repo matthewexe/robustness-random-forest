@@ -45,16 +45,15 @@ def test_get_logger_has_classic_and_detailed_handlers():
     """Test that get_logger has both classic and detailed format handlers."""
     logger = get_logger("test_both_formats")
     
-    # Find handlers by their format
+    # Find handlers by their custom type attribute
     classic_handlers = []
     detailed_handlers = []
     
     for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and handler.formatter:
-            format_str = handler.formatter._fmt
-            if CLASSIC_LOG_FORMAT in format_str:
+        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
+            if handler._handler_type == 'classic':
                 classic_handlers.append(handler)
-            elif DETAILED_LOG_FORMAT in format_str:
+            elif handler._handler_type == 'detailed':
                 detailed_handlers.append(handler)
     
     assert len(classic_handlers) >= 1, "Should have at least one classic handler"
@@ -65,11 +64,10 @@ def test_get_logger_classic_handler_uses_info_level():
     """Test that the classic handler uses INFO level."""
     logger = get_logger("test_classic_level")
     
-    # Find classic handler
+    # Find classic handler by custom type attribute
     for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and handler.formatter:
-            format_str = handler.formatter._fmt
-            if CLASSIC_LOG_FORMAT in format_str:
+        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
+            if handler._handler_type == 'classic':
                 assert handler.level == logging.INFO
 
 
@@ -77,11 +75,10 @@ def test_get_logger_detailed_handler_uses_debug_level():
     """Test that the detailed handler uses DEBUG level."""
     logger = get_logger("test_detailed_level")
     
-    # Find detailed handler
+    # Find detailed handler by custom type attribute
     for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and handler.formatter:
-            format_str = handler.formatter._fmt
-            if DETAILED_LOG_FORMAT in format_str:
+        if isinstance(handler, logging.StreamHandler) and hasattr(handler, '_handler_type'):
+            if handler._handler_type == 'detailed':
                 assert handler.level == logging.DEBUG
 
 

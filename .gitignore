@@ -36,3 +36,8 @@ tests/*.ipynb
 
 # Random Forest results
 Random_Forest_Aeon_Univariate/results/
+
+# Logs
+logs/
+*.log
+*.json.log

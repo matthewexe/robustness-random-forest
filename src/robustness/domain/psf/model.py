@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from typing import TypeAlias
+from typing import TypeAlias, TypedDict, Literal
 
 import networkx as nx
 
 from robustness.domain.bdd import DD_Function
 
 PSF: TypeAlias = nx.DiGraph
+_KindType: TypeAlias = Literal["Constant", "Variable", "Class", "BDD", "Not", "And"]
+ConstantKind = "Constant"
+VariableKind = "Variable"
+ClassKind = "Class"
+BDDKind = "BDD"
+NotKind = "Not"
+AndKind = "And"
 
 def int_generator(start=0):
     i = start
@@ -26,34 +33,34 @@ class Builder:
 
     def Terminal(self, kind: str, value: object) -> int:
         node_id = self.__next_id()
-        self._digraph.add_node(node_id, kind=kind, value=value, is_final=True)
+        self._digraph.add_node(node_id, kind=kind, value=value, is_terminal=True)
         return node_id
 
     def Constant(self,value: bool) -> int:
-        return self.Terminal("Constant", value)
+        return self.Terminal(ConstantKind, value)
 
     def Variable(self, value: str) -> int:
-        return self.Terminal("Variable", value)
+        return self.Terminal(VariableKind, value)
 
     def Class(self, value: str) -> int:
-        return self.Terminal("Class", value)
+        return self.Terminal(ClassKind, value)
 
     def BDD(self, value: DD_Function) -> int:
-        return self.Terminal("BDD", value)
+        return self.Terminal(BDDKind, value)
 
     def Operator(self, kind: str, children: list[int]) -> int:
         node_id = self.__next_id()
-        self._digraph.add_node(node_id, kind=kind)
+        self._digraph.add_node(node_id, kind=kind, is_terminal=False)
         for child in children:
             self._digraph.add_edge(node_id, child)
 
         return node_id
 
     def Not(self, child: int) -> int:
-        return self.Operator("Not", children=[child])
+        return self.Operator(NotKind, children=[child])
 
     def And(self, left_child: int, right_child: int) -> int:
-        return self.Operator("And", children=[left_child, right_child])
+        return self.Operator(AndKind, children=[left_child, right_child])
 
     def Or(self, left_child: int, right_child : int):
         """

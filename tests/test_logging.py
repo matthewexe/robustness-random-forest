@@ -8,6 +8,7 @@ from io import StringIO
 
 from robustness.domain.logging import (
     get_logger,
+    get_detailed_logger,
     CLASSIC_LOG_FORMAT,
     CLASSIC_LOG_LEVEL,
     DETAILED_LOG_FORMAT,
@@ -18,6 +19,12 @@ from robustness.domain.logging import (
 def test_get_logger_returns_logger():
     """Test that get_logger returns a logging.Logger instance."""
     logger = get_logger("test_logger")
+    assert isinstance(logger, logging.Logger)
+
+
+def test_get_detailed_logger_returns_logger():
+    """Test that get_detailed_logger returns a logging.Logger instance."""
+    logger = get_detailed_logger("test_detailed_logger")
     assert isinstance(logger, logging.Logger)
 
 
@@ -41,22 +48,16 @@ def test_get_logger_configures_stdout():
     assert handler.stream == sys.stdout
 
 
-def test_get_logger_classic_mode():
-    """Test that classic mode uses INFO level."""
-    logger = get_logger("test_classic_logger", mode="classic")
+def test_get_logger_uses_info_level():
+    """Test that get_logger uses INFO level."""
+    logger = get_logger("test_classic_logger")
     assert logger.level == logging.INFO
 
 
-def test_get_logger_detailed_mode():
-    """Test that detailed mode uses DEBUG level."""
-    logger = get_logger("test_detailed_logger", mode="detailed")
+def test_get_detailed_logger_uses_debug_level():
+    """Test that get_detailed_logger uses DEBUG level."""
+    logger = get_detailed_logger("test_detailed_logger")
     assert logger.level == logging.DEBUG
-
-
-def test_get_logger_default_mode_is_classic():
-    """Test that default mode is classic (INFO level)."""
-    logger = get_logger("test_default_logger")
-    assert logger.level == logging.INFO
 
 
 def test_get_logger_no_duplicate_handlers():
@@ -66,6 +67,18 @@ def test_get_logger_no_duplicate_handlers():
     initial_handler_count = len(logger1.handlers)
     
     logger2 = get_logger(logger_name)
+    final_handler_count = len(logger2.handlers)
+    
+    assert initial_handler_count == final_handler_count
+
+
+def test_get_detailed_logger_no_duplicate_handlers():
+    """Test that calling get_detailed_logger multiple times doesn't add duplicate handlers."""
+    logger_name = "test_no_duplicates_detailed"
+    logger1 = get_detailed_logger(logger_name)
+    initial_handler_count = len(logger1.handlers)
+    
+    logger2 = get_detailed_logger(logger_name)
     final_handler_count = len(logger2.handlers)
     
     assert initial_handler_count == final_handler_count

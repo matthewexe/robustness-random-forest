@@ -1,4 +1,7 @@
 from robustness.domain.psf.model import And, Or, Not, Constant, PSF, Variable, ClassNode
+from robustness.domain.logging import get_logger
+
+logger = get_logger(__name__)
 
 """
 Partially Satisfiable Formula Grammar
@@ -74,8 +77,13 @@ def ast_to_formula(lark_tree) -> PSF:
 
 def parse_psf(formula_str: str) -> PSF:
     import lark as l
+    
+    logger.info(f"Parsing PSF formula string (length: {len(formula_str)})")
+    logger.debug(f"Formula: {formula_str[:200]}..." if len(formula_str) > 200 else f"Formula: {formula_str}")
 
     parser = l.Lark(grammar=grammar, parser="lalr")
 
     lark_tree = parser.parse(formula_str)  # type: ignore
-    return ast_to_formula(lark_tree.children[0])
+    psf = ast_to_formula(lark_tree.children[0])
+    logger.info("PSF formula parsed successfully")
+    return psf

@@ -1,17 +1,19 @@
-from robustness.schemas.random_forest import (
-    DecisionTreeSchema,
-    InternalNodeSchema,
-    LeafNodeSchema,
-    RandomForestSchema, SampleSchema,
-)
+import datetime
+
+from robustness.domain.logging import get_logger
 from robustness.domain.random_forest import (
     RandomForest,
     DecisionTree,
     InternalNode,
     LeafNode,
-    Node, Sample,
+    Sample, Endpoints,
 )
-from robustness.domain.logging import get_logger
+from robustness.schemas.random_forest import (
+    DecisionTreeSchema,
+    InternalNodeSchema,
+    LeafNodeSchema,
+    RandomForestSchema, SampleSchema, EndpointsSchema,
+)
 
 logger = get_logger(__name__)
 
@@ -40,6 +42,19 @@ def __dt_node_to_model(node: InternalNodeSchema | LeafNodeSchema) -> InternalNod
 
     return InternalNode(low_child, high_child, feature=node.feature, value=node.value)
 
-def sample_schema_to_model(sample_schema: SampleSchema):
-    logger.debug(f"Converting SampleSchema to model with {len(sample_schema)} entries")
-    return Sample(**sample_schema)
+
+def sample_schema_to_model(group: int, _id: int, schema: SampleSchema) -> Sample:
+    logger.debug(f"Converting SampleSchema to model with {len(schema.sample_dict)} entries")
+    timestamp = datetime.datetime.fromisoformat(schema.timestamp)
+    return Sample(group=group,
+                  sample_id=_id,
+                  features=schema.sample_dict.copy(),
+                  predicted_label=schema.predicted_label,
+                  actual_label=schema.actual_label,
+                  dataset_name=schema.dataset_name,
+                  timestamp=timestamp,
+                  prediction_correct=schema.prediction_correct)
+
+
+def endpoints_to_model(endpoints: EndpointsSchema) -> Endpoints:
+    return {k: endpoints[k][1] for k in endpoints}

@@ -16,3 +16,4 @@ def from_json(json_content: str, cls: T) -> T:
     result = adapter.validate_json(json_content)
     logger.info(f"Successfully deserialized JSON to {cls}")
     return result
+

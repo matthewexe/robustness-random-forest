@@ -25,23 +25,6 @@ def is_class(value: str) -> bool:
 
 
 def or_de_morgan(f: PSF):
-    """
-    Computes the logical OR of two formulas using De Morgan's law.
-
-    This function implements OR by negating the AND of the negated operands:
-    OR(A, B) = NOT(AND(NOT(A), NOT(B)))
-
-    Args:
-        left_child (PSF): The left operand formula.
-        right_child (PSF): The right operand formula.
-
-    Returns:
-        PSF: A formula representing the logical OR of the two input formulas.
-
-    Example:
-        >>> result = Or(formula_a, formula_b)
-        >>> # result represents: formula_a OR formula_b
-    """
     if isinstance(f, PSF):
         return f
 

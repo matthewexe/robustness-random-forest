@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import TypeVar
+from typing import TypeVar, TypedDict, TypeAlias
 
 from pydantic import BaseModel
 from robustness.domain.logging import get_logger
@@ -74,4 +74,13 @@ class DecisionTreeSchema(InternalNodeSchema):
 RandomForestSchema = list[DecisionTreeSchema]
 
 # Sample Schema
-SampleSchema = dict[str, float]
+class SampleSchema(BaseModel):
+    sample_dict: dict[str, float]
+    predicted_label: str
+    actual_label: str
+    test_index: int
+    dataset_name: str
+    timestamp: str
+    prediction_correct: bool
+
+EndpointsSchema: TypeAlias = dict[str, list]

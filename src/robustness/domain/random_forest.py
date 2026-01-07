@@ -1,5 +1,8 @@
 from __future__ import annotations
 import abc
+import dataclasses
+import datetime
+from typing import TypeAlias
 
 from robustness.domain.logging import get_logger
 
@@ -141,5 +144,15 @@ class RandomForest(list[DecisionTree]):
     pass
 
 # Sample used for training
-class Sample(dict):
-    pass
+@dataclasses.dataclass
+class Sample:
+    group: int
+    sample_id: int
+    features: dict[str, float]
+    predicted_label: str
+    actual_label: str
+    dataset_name: str
+    timestamp: datetime.datetime
+    prediction_correct: bool
+
+Endpoints: TypeAlias = dict[str, float]

@@ -1,60 +1,46 @@
-from robustness.domain.types import _PSF_Type, _PSF_BDD_Type
-from anytree import NodeMixin
+from typing import TypeAlias
+
 from robustness.domain.logging import get_logger
+from robustness.domain.psf.model import render_formula
+from robustness.domain.tree.model import BinaryTree
 
 logger = get_logger(__name__)
 
-class TableauNode(NodeMixin):
-    psf: _PSF_Type
-    assignment: dict[str, int]
-
-    def __init__(self, psf: _PSF_Type, parent: NodeMixin = None, assignment: dict[str, int] | None = None) -> None:
-        logger.debug(f"Creating TableauNode with assignment: {assignment}")
-        self.psf = psf
-        self.parent = parent
-        self.assignment = assignment
-
-    def __str__(self) -> str:
-        return f"{self.psf}[{self.assignment}]"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def is_bdd(self) -> bool:
-        return isinstance(self.psf, _PSF_BDD_Type)
-
-class TableauTree:
-    root: TableauNode
-
-    def __init__(self, root: TableauNode) -> None:
-        logger.info("Creating new TableauTree")
-        self.root = root
-
-    def is_final(self) -> bool:
-        return is_final(self.root)
+TableauTree: TypeAlias = BinaryTree
 
 
-def is_final(root: TableauNode) -> bool:
-    logger.debug(f"Checking if tableau node is final: {len(root.children)} children")
-    if len(root.children) == 0:
-        return root.is_bdd()
+class Builder:
+    T: BinaryTree
+    next_id: int
 
-    curr = True
-    for child in root.children:
-        curr &= is_final(child)
-        if not curr:
-            break
+    def __init__(self) -> None:
+        self.T = BinaryTree()
+        self.next_id = 0
 
-    return curr
+    def assign(self, current: int, child: int, var: str, value: bool):
+        self.T.add_edge(current, child, var=var, value=value)
 
-def get_leaves(root: TableauNode) -> list[TableauNode]:
-    logger.debug("Getting leaves from tableau node")
-    if root.is_leaf():
-        return [root]
+    def add_tree(self, new_tree: BinaryTree) -> int:
+        node_id = self.next_id
+        formula = render_formula(new_tree)
+        if len(formula) > 200:
+            formula = formula[:197] + "..."
 
-    child_leaves = []
-    for child in root.children:
-        child_leaves += get_leaves(child)
-    
-    logger.debug(f"Found {len(child_leaves)} leaves")
-    return child_leaves
+        self.T.add_node(node_id, tree=new_tree, label=formula)
+        self.next_id += 1
+        return node_id
+
+    def build(self) -> TableauTree:
+        return self.T
+
+
+def get_node_assignments(tree: BinaryTree, node_id: int) -> dict[str, bool]:
+    assignments = {}
+    current = node_id
+
+    while tree.in_degree[current] > 0:
+        parent = tree.parent(current)
+        assignments.update(tree.get_edge_data(parent, current))
+        current = parent
+
+    return assignments

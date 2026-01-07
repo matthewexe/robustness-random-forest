@@ -1,151 +1,127 @@
 from __future__ import annotations
 
-import abc
-from typing import Generic, TypeVar
-
-from anytree import NodeMixin
+from enum import Enum
+from typing import TypeAlias
 
 from robustness.domain.bdd import DD_Function
+from robustness.domain.logging import get_logger
+from robustness.domain.tree.model import BinaryTree
+
+PSF: TypeAlias = BinaryTree
 
 
-class PSF(abc.ABC, NodeMixin):
-
-    def __init__(self, parent=None):
-        self.parent = parent
-
-
-T = TypeVar("T")
-
-
-class Terminal(PSF, Generic[T]):
-    _value: T
-
-    def __init__(self, value: T, parent=None) -> None:
-        super().__init__(parent)
-        self._value = value
-
-    def __str__(self) -> str:
-        return str(self._value)
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __hash__(self):
-        return hash(self._value)
-
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, Terminal):
-            return False
-
-        return value._value == self._value
-
-    value = property(lambda self: self._value)
+class Kind(Enum):
+    CONSTANT = "Constant"
+    VARIABLE = "Variable"
+    CLASS = "Class"
+    BDD = "BDD"
+    NOT = "Not"
+    AND = "And"
 
 
-class Constant(Terminal[bool]):
-    pass
+logger = get_logger(__name__)
 
 
-class Variable(Terminal[str]):
-    pass
+def int_generator(start=0):
+    i = start
+    while True:
+        yield i
+        i += 1
 
 
-class BDD(Terminal[DD_Function]):
-    __count: dict[str, int]
+class Builder:
+    def __init__(self):
+        self.T = BinaryTree()
+        self._next_id = 0
 
+    # ────────────── core ──────────────
 
-class ClassNode(Terminal[str]):
-    pass
+    def _new_node(self, **attrs) -> int:
+        nid = self._next_id
+        self._next_id += 1
+        self.T.add_node(nid, **attrs)
+        return nid
 
+    # ────────────── terminals ──────────────
 
-class UnaryOperator(PSF, abc.ABC):
-    _child: PSF
-
-    def __init__(self, op_str: str, child: PSF, parent=None) -> None:
-        super().__init__(parent)
-        self._op_str = op_str
-        self._child = child
-        self._child.parent = self
-
-    child = property(lambda self: self._child)
-
-    def __str__(self) -> str:
-        return f"{self._op_str}{self._child}"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __hash__(self):
-        return hash((self._op_str, self.child))
-
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, UnaryOperator):
-            return False
-
-        if self._op_str != value._op_str:
-            return False
-
-        return value.child == self.child
-
-
-class Not(UnaryOperator):
-
-    def __init__(self, child: PSF, parent=None):
-        super().__init__("~", child, parent)
-
-
-class BinaryOperator(PSF, abc.ABC):
-    _left_child: PSF
-    _right_child: PSF
-
-    def __init__(self, op_str: str, left_child: PSF, right_child: PSF, parent=None) -> None:
-        super().__init__(parent)
-        self._op_str = op_str
-        self._left_child = left_child
-        self._right_child = right_child
-
-        self._left_child.parent = self
-        self._right_child.parent = self
-
-    left_child = property(lambda self: self._left_child)
-    right_child = property(lambda self: self._right_child)
-
-    def __str__(self) -> str:
-        return f"{self.left_child} {self._op_str} {self.right_child}"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __hash__(self):
-        return hash((self._op_str, self._left_child, self.right_child))
-
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, BinaryOperator):
-            return False
-        if self._op_str != value._op_str:
-            return False
-
-        return (
-                value.left_child == self.left_child
-                and value.right_child == self.right_child
+    def Terminal(self, kind: Kind, value) -> int:
+        return self._new_node(
+            kind=kind,
+            value=value,
         )
 
+    def Constant(self, value: bool) -> int:
+        return self.Terminal(Kind.CONSTANT, value)
 
-class And(BinaryOperator):
+    def Variable(self, name: str) -> int:
+        return self.Terminal(Kind.VARIABLE, name)
 
-    def __init__(self, left_child: PSF, right_child: PSF, parent=None):
-        super().__init__("&", left_child, right_child, parent)
+    def Class(self, name: str) -> int:
+        return self.Terminal(Kind.CLASS, name)
+
+    def BDD(self, value: DD_Function) -> int:
+        return self.Terminal(Kind.BDD, value)
+
+    # ────────────── operators ──────────────
+
+    def Not(self, child: int) -> int:
+        n = self._new_node(kind=Kind.NOT)
+        self.T.add_left(n, child)
+        return n
+
+    def And(self, left: int, right: int) -> int:
+        n = self._new_node(kind=Kind.AND)
+        self.T.add_left(n, left)
+        self.T.add_right(n, right)
+        return n
+
+    def Or(self, left: int, right: int) -> int:
+        # De Morgan
+        return self.Not(self.And(self.Not(left), self.Not(right)))
+
+    # ────────────── accessors ──────────────
+
+    def left(self, node: int) -> int | None:
+        return self.T.left(node)
+
+    def right(self, node: int) -> int | None:
+        return self.T.right(node)
+
+    def parent(self, node: int) -> int | None:
+        return self.T.parent(node)
+
+    # ────────────── export ──────────────
+
+    def build(self) -> BinaryTree:
+        return self.T
 
 
-def Or(left_child: PSF, right_child: PSF) -> PSF:
-    """
-    De Morgan rule.
-        a | b = !(!a & !b)
-    Args:
-        left_child:
-        right_child:
+def is_terminal(kind: Kind):
+    return kind in {Kind.VARIABLE, Kind.CONSTANT, Kind.CLASS, Kind.BDD}
 
-    Returns:
+def is_bdd(f: PSF):
+    if not f.nodes or len(f.nodes) > 1:
+        return False
 
-    """
-    return Not(And(Not(left_child), Not(right_child)))
+    root_attr = f.nodes[f.root]
+    return root_attr['kind'] is Kind.BDD
+
+def render_formula(f: PSF):
+    memo = {}
+
+    for node in f.postorder_iter():
+        attr = f.nodes[node]
+
+        kind = attr['kind']
+        if is_terminal(kind):
+            memo[node] = str(attr['value'])
+        else:
+            if kind is Kind.NOT:
+                child = f.left(node)
+                memo[node] = f"~({memo[child]})"
+            elif kind is Kind.AND:
+                left_child = f.left(node)
+                right_child = f.right(node)
+                memo[node] = f"{memo[left_child]} & {memo[right_child]}"
+
+    return memo[f.root]

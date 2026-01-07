@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Iterable
 
 from robustness.domain.config import Config
-from robustness.domain.psf.model import PSF, Or, Not, And, Variable, Terminal, UnaryOperator, BinaryOperator, \
-    ClassNode
 from robustness.domain.logging import get_logger
+from robustness.domain.psf.model import PSF, Kind, is_terminal
 
 logger = get_logger(__name__)
 
@@ -57,35 +56,21 @@ def filter_variables(variables: Iterable[str]) -> set[str]:
     return filtered
 
 
-def get_variables(formula: PSF) -> set[str]:
-    logger.debug(f"Extracting variables from formula type {type(formula).__name__}")
-    if isinstance(formula, Terminal):
-        if isinstance(formula, Variable):
-            s = set()
-            s.add(formula.value)
-            logger.debug(f"Found variable: {formula.value}")
-            return s
-        return set()
-    if isinstance(formula, UnaryOperator):
-        return get_variables(formula.child)
-    if isinstance(formula, BinaryOperator):
-        return get_variables(formula.left_child) | get_variables(formula.right_child)
+def get_leaves(f: PSF) -> list[dict]:
+    final_nodes = list()
+    for n, attrs in f.nodes(data=True):
+        if is_terminal(attrs['kind']):
+            final_nodes.append((n,attrs))
+    return final_nodes
 
-    raise TypeError(f"{type(formula)} not recognized.")
+
+def get_variables(formula: PSF) -> set[str]:
+    leaves = get_leaves(formula)
+    filtered = filter(lambda x: x[1]['kind'] == Kind.VARIABLE, leaves)
+    return set(map(lambda item: item[1]['value'], filtered))
 
 
 def get_classes(formula: PSF) -> set[str]:
-    logger.debug(f"Extracting classes from formula type {type(formula).__name__}")
-    if isinstance(formula, Terminal):
-        if isinstance(formula, ClassNode):
-            s = set()
-            s.add(formula.value)
-            logger.debug(f"Found class: {formula.value}")
-            return s
-        return set()
-    if isinstance(formula, UnaryOperator):
-        return get_classes(formula.child)
-    if isinstance(formula, BinaryOperator):
-        return get_classes(formula.left_child) | get_classes(formula.right_child)
-
-    raise TypeError(f"{type(formula)} not recognized.")
+    leaves = get_leaves(formula)
+    filtered = filter(lambda x: x[1]['kind'] == Kind.CLASS, leaves)
+    return set(map(lambda item: item[1]['value'], filtered))

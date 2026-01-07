@@ -1,7 +1,9 @@
 from os import PathLike
 from pathlib import Path
 
+from robustness.adapters import from_json
 from robustness.domain.logging import get_logger
+from robustness.schemas.random_forest import RandomForestSchema, SampleSchema
 
 logger = get_logger(__name__)
 
@@ -24,26 +26,26 @@ class RandomForestService:
         self.__model_name = model_name
         self.__base_results_path = Path(base_results_path)
 
-    def get_random_forest(self) -> str:
+    def get_random_forest(self) -> RandomForestSchema:
         path = self.__base_results_path / self.get_rf_file_name()
         logger.info(f"Loading random forest from: {path}")
         content = get_file_content(path.resolve())
         logger.debug(f"Random forest loaded successfully from {path}")
-        return content
+        return from_json(content, RandomForestSchema)
 
-    def get_sample(self, sample_id: str) -> str:
+    def get_sample(self, sample_id: str) -> SampleSchema:
         path = self.__base_results_path / self.get_sample_file_name(sample_id)
         logger.info(f"Loading sample {sample_id} from: {path}")
         content = get_file_content(path.resolve())
         logger.debug(f"Sample {sample_id} loaded successfully")
-        return content
+        return from_json(content, SampleSchema)
 
     def get_rf_file_name(self) -> str:
         filename = f"{self.__model_name}_random_forest.json"
         logger.debug(f"Generated random forest filename: {filename}")
         return filename
 
-    def get_sample_file_name(self, sample_id:str) -> str:
+    def get_sample_file_name(self, sample_id: str) -> str:
         filename = f"sample_{self.__model_name}_{sample_id}.json"
         logger.debug(f"Generated sample filename: {filename}")
         return filename

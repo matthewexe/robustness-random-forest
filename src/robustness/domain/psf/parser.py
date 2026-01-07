@@ -1,5 +1,3 @@
-from collections import deque
-
 import robustness.domain.psf as psf
 from robustness.domain.logging import get_logger
 
@@ -77,11 +75,9 @@ def ast_to_formula(lark_tree, builder: psf.Builder) -> int:
     raise ValueError(f"{lark_tree.data} unrecognized")
 
 
-
-
 def parse_psf(formula_str: str) -> psf.PSF:
     import lark as l
-    
+
     logger.info(f"Parsing PSF formula string (length: {len(formula_str)})")
     logger.debug(f"Formula: {formula_str[:200]}..." if len(formula_str) > 200 else f"Formula: {formula_str}")
 

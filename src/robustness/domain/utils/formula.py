@@ -4,7 +4,7 @@ from typing import Iterable
 
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
-from robustness.domain.psf.model import PSF, VariableKind, ClassKind
+from robustness.domain.psf.model import PSF, Kind, is_terminal
 
 logger = get_logger(__name__)
 
@@ -59,18 +59,18 @@ def filter_variables(variables: Iterable[str]) -> set[str]:
 def get_leaves(f: PSF) -> list[dict]:
     final_nodes = list()
     for n, attrs in f.nodes(data=True):
-        if attrs['is_terminal']:
+        if is_terminal(attrs['kind']):
             final_nodes.append((n,attrs))
     return final_nodes
 
 
 def get_variables(formula: PSF) -> set[str]:
     leaves = get_leaves(formula)
-    filtered = filter(lambda x: x[1]['kind'] == VariableKind, leaves)
-    return set(map(str, filtered))
+    filtered = filter(lambda x: x[1]['kind'] == Kind.VARIABLE, leaves)
+    return set(map(lambda item: item[1]['value'], filtered))
 
 
 def get_classes(formula: PSF) -> set[str]:
     leaves = get_leaves(formula)
-    filtered = filter(lambda x: x[1]['kind'] == ClassKind, leaves)
-    return set(map(str, filtered))
+    filtered = filter(lambda x: x[1]['kind'] == Kind.CLASS, leaves)
+    return set(map(lambda item: item[1]['value'], filtered))

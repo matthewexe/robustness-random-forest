@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from collections import deque
+
 import networkx as nx
 
+import robustness.domain.psf.tableau.model as tb
 from robustness.domain.bdd.manager import get_bdd_manager
+from robustness.domain.bdd.operations import max_occ_var
+from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
-from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal
+from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd
+from robustness.domain.psf.tableau.model import TableauTree
 from robustness.domain.tree.model import BinaryTree
 from robustness.domain.tree.operations import map_nodes_of, remove_unconnected_nodes
 
@@ -83,6 +89,8 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
 
     nodes_map = {}
     root = None
+    last_outcome = False
+
     for node in nx.dfs_postorder_nodes(f):
         attrs = f.nodes[node]
         kind = attrs['kind']
@@ -138,11 +146,24 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
             else:
                 logger.warning(f"Node type {kind} not recognized[id={node}]. Skipping...")
 
-        root, _ = nodes_map[node]
+        root, last_outcome = nodes_map[node]
 
     built_tree = builder.build()
 
-    return remove_unconnected_nodes(built_tree, root), False
+    return remove_unconnected_nodes(built_tree, root), last_outcome
+
+
+def bdd_best_var(f: PSF) -> tuple[str, int]:
+    memo_max = {}
+
+    for leaf in f.leaves:
+        leaf_attr = f.nodes[leaf]
+        if leaf_attr['kind'] is Kind.BDD:
+            memo_max[leaf] = max_occ_var(leaf_attr['value'])
+
+    max_id = max(memo_max, key=lambda x: memo_max[x][1])
+    return memo_max[max_id]
+
 
 # def bdd_best_var(f: PSF) -> tuple[str, int]:
 #     logger.debug(f"Finding best variable in BDD for type {type(f).__name__}")
@@ -163,7 +184,33 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
 #     raise TypeError(f"{type(f)} not recognized.")
 #
 #
-# def tableau_method(f: PSF, tree: TableauNode | None = None, current_node: TableauNode | None = None) -> TableauTree:
+def tableau_method(f: PSF) -> TableauTree:
+    config = Config()
+    tree = tb.Builder()
+    root = tree.add_tree(f)
+
+    frontier = deque([root])
+    while frontier:
+        current = frontier.popleft()
+        current_tree = tree.T.nodes[current]['tree']
+
+        if is_bdd(current_tree):
+            continue
+
+        best_var, best_occ = bdd_best_var(current_tree)
+        low_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: False})
+        low_id = tree.add_tree(low_tree)
+        tree.assign(current, low_id, best_var, False)
+        frontier.append(low_id)
+
+        high_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: True})
+        high_id = tree.add_tree(high_tree)
+        tree.assign(current, high_id, best_var, True)
+        frontier.append(high_id)
+
+    return tree.build()
+
+
 #     logger.debug(f"Applying tableau method on PSF type {type(f).__name__}")
 #     if not tree:
 #         logger.info("Creating new tableau tree")
@@ -198,3 +245,4 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
 #
 #     logger.debug("Tableau method completed for current node")
 #     return tree
+

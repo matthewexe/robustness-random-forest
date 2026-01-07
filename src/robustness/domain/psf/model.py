@@ -98,3 +98,30 @@ class Builder:
 
 def is_terminal(kind: Kind):
     return kind in {Kind.VARIABLE, Kind.CONSTANT, Kind.CLASS, Kind.BDD}
+
+def is_bdd(f: PSF):
+    if not f.nodes or len(f.nodes) > 1:
+        return False
+
+    root_attr = f.nodes[f.root]
+    return root_attr['kind'] is Kind.BDD
+
+def render_formula(f: PSF):
+    memo = {}
+
+    for node in f.postorder_iter():
+        attr = f.nodes[node]
+
+        kind = attr['kind']
+        if is_terminal(kind):
+            memo[node] = str(attr['value'])
+        else:
+            if kind is Kind.NOT:
+                child = f.left(node)
+                memo[node] = f"~({memo[child]})"
+            elif kind is Kind.AND:
+                left_child = f.left(node)
+                right_child = f.right(node)
+                memo[node] = f"{memo[left_child]} & {memo[right_child]}"
+
+    return memo[f.root]

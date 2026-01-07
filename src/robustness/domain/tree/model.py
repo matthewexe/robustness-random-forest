@@ -1,4 +1,4 @@
-from typing import override
+from typing import override, Iterator
 
 import networkx as nx
 
@@ -52,4 +52,8 @@ class BinaryTree(nx.DiGraph):
         self._add_child(parent, child, index=1)
 
     def postorder_iter(self):
-        return nx.dfs_postorder_nodes(self)
+        return nx.dfs_postorder_nodes(self, self.root)
+
+    @property
+    def leaves(self) -> Iterator[int]:
+        return (node for node in self.nodes if self.out_degree[node] == 0)

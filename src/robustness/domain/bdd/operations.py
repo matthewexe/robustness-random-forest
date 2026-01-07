@@ -20,7 +20,7 @@ def count_vars(f: DD_Function, *variables) -> int:
 
     """
     count = sum([1 for node in iter_nodes(f) if node.var in variables])
-    logger.debug(f"Counted {count} occurrences of variables in BDD")
+    logger.debug(f"Counted {count} occurrences of {", ".join(variables)} in BDD")
     return count
 
 def iter_nodes(root):

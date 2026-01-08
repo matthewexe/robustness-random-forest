@@ -24,7 +24,7 @@ def get_bdd_manager() -> DD_Manager:
 
 def declare_vars(bdd: DD_Manager, formula: _PSF_Type):
     logger.info("Declaring BDD variables from formula")
-    variables = get_variables(formula) | get_classes(formula)
+    variables = list(get_variables(formula)) + list(get_classes(formula))
     logger.debug(f"Declaring {len(variables)} variables in BDD manager")
     bdd.declare(*variables)
     logger.info(f"Successfully declared {len(variables)} variables")

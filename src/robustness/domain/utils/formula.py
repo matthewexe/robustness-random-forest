@@ -23,6 +23,11 @@ def is_class(value: str) -> bool:
     import re
     return re.match(r"^(c)?\d+$", value) is not None
 
+def get_class_label(value: str) -> str:
+    if not is_class(value):
+        return value
+
+    return value[1:]
 
 def or_de_morgan(f: PSF):
     if isinstance(f, PSF):

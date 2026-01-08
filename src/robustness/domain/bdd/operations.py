@@ -1,7 +1,8 @@
+from robustness.domain.logging import get_logger
+from robustness.domain.random_forest import Endpoints, Sample
+from robustness.domain.utils.formula import filter_variables, is_class
 from . import DD_Function
 from .manager import get_bdd_manager
-from ..utils.formula import filter_variables
-from robustness.domain.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,7 @@ def count_vars(f: DD_Function, *variables) -> int:
     logger.debug(f"Counted {count} occurrences of {", ".join(variables)} in BDD")
     return count
 
+
 def iter_nodes(root):
     visited = set()
     stack = [root]
@@ -39,15 +41,33 @@ def iter_nodes(root):
             stack.append(u.low)
             stack.append(u.high)
 
+
 def max_occ_var(f: DD_Function) -> tuple[str, int]:
     logger.debug("Finding variable with maximum occurrences in BDD")
-    count = {v:count_vars(f, v) for v in manager.support(f)}
+    count = {v: count_vars(f, v) for v in manager.support(f)}
     variables = filter_variables(count.keys())
     if len(variables) == 0:
         logger.debug("No variables found in BDD")
         return "", -1
 
-    filtered_count = {v:count[v] for v in variables}
+    filtered_count = {v: count[v] for v in variables}
     best_var = max(filtered_count, key=filtered_count.get)
     logger.debug(f"Best variable: {best_var} with {filtered_count[best_var]} occurrences")
     return best_var, filtered_count[best_var]
+
+
+def path_of(sample: Sample, f: DD_Function, endpoints: Endpoints) -> str:
+    if f in {manager.false, manager.true}:
+        return ""
+
+    if is_class(f.var):
+        if sample.predicted_label == f.var[1:]:
+            return path_of(sample, f.high, endpoints)+ "1"
+        else:
+            return path_of(sample, f.low, endpoints) + "0"
+
+    if sample.features[f.var] <= endpoints[f.var]:
+        return path_of(sample, f.low, endpoints) + "0"
+    else:
+        return path_of(sample, f.high, endpoints) + "1"
+

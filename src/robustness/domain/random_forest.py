@@ -155,4 +155,9 @@ class Sample:
     timestamp: datetime.datetime
     prediction_correct: bool
 
+    def __str__(self) -> str:
+        sample_id = self.sample_id
+        group = self.group
+        return f"Sample({group=}, {sample_id=})"
+
 Endpoints: TypeAlias = dict[str, float]

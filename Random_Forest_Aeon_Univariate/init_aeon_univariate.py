@@ -4,6 +4,7 @@ import argparse
 import json
 import datetime
 import os
+import logging
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -16,6 +17,17 @@ from eu import store_monotonic_dict
 from forest import store_forest
 from sample import sklearn_sample_to_dict, store_sample
 from skforest_to_forest import sklearn_forest_to_forest
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('init_aeon_univariate.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # List of popular aeon univariate datasets
 AVAILABLE_DATASETS = [
@@ -131,12 +143,15 @@ def get_dataset_info(dataset_name):
 
 def load_and_prepare_dataset(dataset_name, feature_prefix="t"):
     """Load and prepare aeon dataset"""
+    logger.info(f"Loading dataset: {dataset_name}")
     print(f"Loading dataset: {dataset_name}")
 
     try:
         X_train, y_train = load_classification(dataset_name, split="train")
         X_test, y_test = load_classification(dataset_name, split="test")
+        logger.info(f"Successfully loaded dataset from aeon")
     except Exception as e:
+        logger.error(f"Failed to load dataset {dataset_name}: {e}")
         raise Exception(f"Failed to load dataset {dataset_name}: {e}")
 
     print(f"Dataset: {dataset_name}")
@@ -144,18 +159,24 @@ def load_and_prepare_dataset(dataset_name, feature_prefix="t"):
     print(f"Test set: {X_test.shape} samples")
     print(f"Series length: {X_train.shape[2]} time points")
     print(f"Classes: {np.unique(np.concatenate([y_train, y_test]))}")
+    
+    logger.debug(f"Dataset: {dataset_name}, Training set: {X_train.shape}, Test set: {X_test.shape}")
+    logger.debug(f"Series length: {X_train.shape[2]}, Classes: {np.unique(np.concatenate([y_train, y_test]))}")
 
     # Reshape data: (n_samples, n_channels, n_timepoints) -> (n_samples, n_timepoints)
     X_train_2d = X_train.reshape(X_train.shape[0], -1)
     X_test_2d = X_test.reshape(X_test.shape[0], -1)
+    logger.debug(f"Reshaped data: X_train_2d shape={X_train_2d.shape}, X_test_2d shape={X_test_2d.shape}")
 
     # Calculate padding width for feature names
     series_length = X_train_2d.shape[1]
     padding_width = len(str(series_length - 1))
     feature_names = [f"{feature_prefix}_{i:0{padding_width}d}" for i in range(series_length)]
+    logger.debug(f"Generated {len(feature_names)} feature names with prefix '{feature_prefix}'")
 
     # Get all unique classes
     all_classes = np.unique(np.concatenate([y_train, y_test])).astype(str)
+    logger.info(f"Dataset prepared with {len(all_classes)} classes: {all_classes}")
 
     return X_train_2d, y_train, X_test_2d, y_test, feature_names, all_classes
 
@@ -407,16 +428,19 @@ def train_and_convert_forest(X_train, y_train, X_test, y_test, rf_params, featur
         final_X_train: The actual training data used (for saving to DB)
         final_y_train: The actual training labels used (for saving to DB)
     """
+    logger.info("Training Random Forest model")
     print("Training Random Forest...")
 
     if test_split is not None:
         # Custom split mode: combine train+test and re-split
+        logger.info(f"Using custom split mode with test_size={test_split}")
         print(f"Custom split mode: combining datasets and splitting with test_size={test_split}")
         X_combined = np.vstack([X_train, X_test])
         y_combined = np.concatenate([y_train, y_test])
 
         # Apply sample percentage filtering if specified
         if sample_percentage is not None and sample_percentage < 100.0:
+            logger.info(f"Applying sample percentage filter: {sample_percentage}%")
             print(f"Applying sample percentage filter: {sample_percentage}%")
             # Calculate how many samples to keep
             n_samples = len(X_combined)
@@ -430,12 +454,15 @@ def train_and_convert_forest(X_train, y_train, X_test, y_test, rf_params, featur
             y_combined = y_combined[indices]
 
             print(f"Reduced from {n_samples} to {len(X_combined)} samples ({sample_percentage}%)")
+            logger.debug(f"Reduced from {n_samples} to {len(X_combined)} samples")
 
         X_train_final, X_test_final, y_train_final, y_test_final = train_test_split(
             X_combined, y_combined, test_size=test_split, random_state=random_state
         )
+        logger.debug(f"Split data: train={X_train_final.shape}, test={X_test_final.shape}")
     else:
         # Default mode: use original aeon train/test split
+        logger.info("Using original aeon train/test split")
         print("Using original aeon train/test split")
         X_train_final = X_train
         y_train_final = y_train
@@ -444,10 +471,13 @@ def train_and_convert_forest(X_train, y_train, X_test, y_test, rf_params, featur
 
     print(f"Training set: {X_train_final.shape[0]} samples")
     print(f"Test set: {X_test_final.shape[0]} samples")
+    logger.info(f"Training set: {X_train_final.shape[0]} samples, Test set: {X_test_final.shape[0]} samples")
 
     # Train Random Forest
+    logger.debug(f"Training Random Forest with parameters: {rf_params}")
     rf = RandomForestClassifier(**rf_params)
     rf.fit(X_train_final, y_train_final)
+    logger.info("Random Forest training completed")
 
     # Evaluate
     train_score = rf.score(X_train_final, y_train_final)
@@ -455,11 +485,14 @@ def train_and_convert_forest(X_train, y_train, X_test, y_test, rf_params, featur
 
     print(f"Training accuracy: {train_score:.3f}")
     print(f"Test accuracy: {test_score:.3f}")
+    logger.info(f"Model evaluation: training_accuracy={train_score:.3f}, test_accuracy={test_score:.3f}")
 
     # Convert to our Forest format
+    logger.info("Converting sklearn Random Forest to custom Forest format")
     print("Converting to custom Forest format...")
     our_forest = sklearn_forest_to_forest(rf, feature_names)
     print(f"Converted to Forest with {len(our_forest)} trees")
+    logger.info(f"Conversion complete: {len(our_forest)} trees in custom format")
 
     return rf, our_forest, X_train_final, y_train_final
 
@@ -495,6 +528,7 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
 
     If sample_percentage is provided, only process that percentage of samples
     """
+    logger.info(f"Processing all samples classified as '{class_label}'")
     print(f"\n=== Processing All Samples Classified as '{class_label}' ===")
 
     # Find all test samples that are classified as the target class
@@ -504,6 +538,7 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
     # Apply sample percentage filtering if specified
     total_test_samples = len(X_test)
     if sample_percentage is not None and sample_percentage < 100.0:
+        logger.info(f"Applying sample percentage filter: {sample_percentage}% of {total_test_samples} test samples")
         print(f"Applying sample percentage filter: {sample_percentage}% of {total_test_samples} test samples")
         # Randomly select indices
         n_keep = int(total_test_samples * sample_percentage / 100.0)
@@ -512,10 +547,12 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
         X_test_filtered = X_test[indices]
         y_test_filtered = y_test[indices]
         print(f"Reduced test samples from {total_test_samples} to {len(X_test_filtered)} ({sample_percentage}%)")
+        logger.debug(f"Reduced test samples from {total_test_samples} to {len(X_test_filtered)}")
     else:
         X_test_filtered = X_test
         y_test_filtered = y_test
 
+    logger.debug(f"Processing {len(X_test_filtered)} test samples for classification")
     for i, (sample, actual_label) in enumerate(zip(X_test_filtered, y_test_filtered)):
         sample_dict = sklearn_sample_to_dict(sample, feature_names)
         predicted_label = our_forest.predict(sample_dict)
@@ -531,15 +568,18 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
             })
 
     print(f"Found {len(target_samples_data)} samples classified as '{class_label}'")
+    logger.info(f"Found {len(target_samples_data)} samples classified as '{class_label}'")
 
     if len(target_samples_data) == 0:
         print("  No samples classified with the target label!")
+        logger.warning(f"No samples classified with target label '{class_label}'")
         return [], {}
 
     # Store all samples and their ICF representations
     stored_samples = []
     correct_predictions = 0
 
+    logger.debug(f"Storing {len(target_samples_data)} samples")
     for idx, sample_data in enumerate(target_samples_data):
         filename = f"{dataset_name}_{class_label}_{idx}.json"
 
@@ -589,12 +629,14 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
     print(f"Correct predictions: {summary['correct_predictions']}")
     print(f"Incorrect predictions: {summary['incorrect_predictions']}")
     print(f"Target label precision: {summary['target_label_precision']:.3f}")
+    logger.info(f"Summary for '{class_label}': correct={summary['correct_predictions']}, incorrect={summary['incorrect_predictions']}, precision={summary['target_label_precision']:.3f}")
 
     return stored_samples, summary
 
 
 
 def main():
+    logger.info("Starting init_aeon_univariate main function")
     parser = argparse.ArgumentParser(
         description="Initialize random path worker system with aeon univariate datasets",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -613,6 +655,7 @@ Examples:
   python init_aeon_univariate.py ECG200 --sample-percentage 0.05
         """
     )
+    logger.debug("Argument parser initialized")
 
     parser.add_argument('dataset_name', nargs='?',
                         help='Name of the aeon univariate dataset to load')
@@ -674,26 +717,33 @@ Examples:
                         help='Prefix for feature names (default: "t")')
 
     args = parser.parse_args()
+    logger.debug(f"Parsed arguments: {args}")
 
     # Handle list datasets
     if args.list_datasets:
+        logger.info("Listing available datasets")
         list_available_datasets()
         return 0
 
     # Validate arguments
     if not args.dataset_name:
+        logger.error("dataset_name is required (or use --list-datasets)")
         parser.error("dataset_name is required (or use --list-datasets)")
 
     # Show dataset info if requested
+    logger.info(f"Getting information for dataset: {args.dataset_name}")
     info = get_dataset_info(args.dataset_name)
     classes = info['classes']
+    logger.debug(f"Dataset info retrieved: {info}")
     print(f"Getting information for dataset: {args.dataset_name}")
     if 'error' in info:
+        logger.error(f"Error loading dataset: {info['error']}")
         print(f" Error loading dataset: {info['error']}")
         print("Make sure the dataset name is correct and aeon is installed.")
         return 1
 
     if args.info:
+        logger.info(f"Displaying dataset information for {args.dataset_name}")
         print(f"\n Dataset Information: {args.dataset_name}")
         print(f"  Training samples: {info['train_size']}")
         print(f"  Test samples: {info['test_size']}")
@@ -704,32 +754,40 @@ Examples:
 
         return 0
 
+    logger.info(f"Initializing Random Path Worker System for dataset: {args.dataset_name}")
+    logger.info(f"Sample Percentage: {args.sample_percentage}%")
     print(f" Initializing Random Path Worker System")
     print(f" Dataset: {args.dataset_name}")
     print(f" Sample Percentage: {args.sample_percentage}%")
 
     try:
         # Load and prepare dataset
+        logger.info(f"Loading and preparing dataset: {args.dataset_name}")
         X_train, y_train, X_test, y_test, feature_names, class_names = load_and_prepare_dataset(
             args.dataset_name, args.feature_prefix
         )
+        logger.info(f"Dataset loaded successfully with {len(feature_names)} features and {len(class_names)} classes")
 
         # Determine which training data to use for optimization
         # If test_split is specified, we'll combine and split later in train_and_convert_forest
         # For optimization, we use the original training set
         X_train_for_opt = X_train
         y_train_for_opt = y_train
+        logger.debug(f"Training data prepared: X_train shape={X_train.shape}, y_train shape={y_train.shape}")
 
         # Optionally optimize RF hyperparameters with Bayesian optimization
         if args.optimize_rf:
+            logger.info("Starting Bayesian optimization for Random Forest hyperparameters")
             print("\n" + "="*70)
             print("BAYESIAN OPTIMIZATION MODE")
             print("="*70)
 
             # Get search space
             search_space = get_rf_search_space()
+            logger.debug(f"Search space defined with {len(search_space)} hyperparameters")
 
             # Run Bayesian optimization
+            logger.info(f"Running Bayesian optimization with n_iter={args.opt_n_iter}, cv={args.opt_cv}")
             best_params, best_score, test_score, optimizer = optimize_rf_hyperparameters(
                 X_train_for_opt, y_train_for_opt,
                 search_space=search_space,
@@ -742,6 +800,7 @@ Examples:
                 y_test=y_test,
                 use_test_for_validation=args.opt_use_test
             )
+            logger.info(f"Optimization completed with best_score={best_score}, test_score={test_score}")
 
             # Store optimization results in DATA for future reference
             opt_results = {
@@ -756,48 +815,66 @@ Examples:
             }
 
             opt_results_path = results_path(f"{args.dataset_name}_random_forest_optimization_results.json")
+            logger.debug(f"Saving optimization results to {opt_results_path}")
             with open(opt_results_path, 'w') as f:
                 # Convert numpy types to native Python types for JSON serialization
                 f.write(json.dumps(convert_numpy_types(opt_results)))
+            logger.info("Optimization results saved successfully")
 
             # Use optimized parameters
             rf_params = {**best_params, 'random_state': args.random_state}
+            logger.info(f"Using optimized parameters: {rf_params}")
 
         else:
             # Use manually specified parameters
+            logger.info("Using manually specified Random Forest parameters")
             rf_params = create_forest_params(args)
+            logger.debug(f"Forest parameters: {rf_params}")
 
         # Train and convert forest
+        logger.info("Training and converting Random Forest model")
         sklearn_rf, our_forest, X_train_used, y_train_used = train_and_convert_forest(
             X_train, y_train, X_test, y_test, rf_params, feature_names,
             test_split=args.test_split, random_state=args.random_state,
             sample_percentage=args.sample_percentage
         )
+        logger.info(f"Random Forest trained with {len(our_forest)} trees")
 
         # Store training set in DATA database
+        logger.info("Storing training set to database")
         store_training_set(X_train, y_train, feature_names, args.dataset_name)
 
         # Store forest and endpoints
+        logger.info("Storing Random Forest model")
         print("Storing Random Forest...")
 
         if store_forest(our_forest, f"{args.dataset_name}_random_forest.json"):
             print("Forest saved successfully")
+            logger.info("Forest saved successfully")
         else:
+            logger.error("Failed to save forest")
             raise Exception("Failed to save forest")
 
         # Extract and store feature thresholds (endpoints universe)
+        logger.info("Extracting feature thresholds (endpoints universe)")
         print("Extracting feature thresholds...")
         eu_data = our_forest.extract_feature_thresholds()
         print(f"Extracted thresholds for {len(eu_data)} features")
+        logger.info(f"Extracted thresholds for {len(eu_data)} features")
 
+        logger.info("Storing endpoints universe")
         print("Storing endpoints universe...")
         if store_monotonic_dict(eu_data, f"{args.dataset_name}_endpoints_universe.json"):
             print("Endpoints universe saved successfully")
+            logger.info("Endpoints universe saved successfully")
         else:
+            logger.error("Failed to save endpoints universe")
             raise Exception("Failed to save endpoints universe")
 
+        logger.info(f"Processing samples for {len(classes)} classes")
         for class_label in classes:
             # Process all test samples classified with target label
+            logger.info(f"Processing samples classified as '{class_label}'")
             stored_samples, summary = process_all_classified_samples(
                 dataset_name=args.dataset_name,
                 class_label=class_label,
@@ -807,19 +884,25 @@ Examples:
                 feature_names=feature_names,
                 sample_percentage=args.sample_percentage
             )
+            logger.info(f"Processed {len(stored_samples)} samples for class '{class_label}'")
 
         print(f"\nSuccessfully completed for {args.dataset_name} with labels ", [str(c) for c in classes])
         print(f"Forest: {len(our_forest)} trees")
         print(f"Features: {len(feature_names)}")
+        logger.info(f"Successfully completed initialization for {args.dataset_name}")
+        logger.info(f"Forest: {len(our_forest)} trees, Features: {len(feature_names)}")
 
     except KeyboardInterrupt:
+        logger.warning("Interrupted by user")
         print("\n  Interrupted by user")
     except Exception as e:
+        logger.error(f"Error occurred: {e}", exc_info=True)
         print(f"\n Error: {e}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         return 1
 
+    logger.info("init_aeon_univariate main function completed successfully")
     return 0
 
 

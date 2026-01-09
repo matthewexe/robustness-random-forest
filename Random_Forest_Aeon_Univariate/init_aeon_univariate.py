@@ -18,15 +18,7 @@ from forest import store_forest
 from sample import sklearn_sample_to_dict, store_sample
 from skforest_to_forest import sklearn_forest_to_forest
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('init_aeon_univariate.log'),
-        logging.StreamHandler()
-    ]
-)
+# Configure logging - will be set up properly in main() based on arguments
 logger = logging.getLogger(__name__)
 
 # List of popular aeon univariate datasets
@@ -57,6 +49,35 @@ AVAILABLE_DATASETS = [
 ]
 
 RESULTS_DIR = "results"
+
+
+def setup_logging(log_level=logging.INFO, log_file=None):
+    """
+    Configure logging for the application.
+    
+    Args:
+        log_level: Logging level (default: INFO)
+        log_file: Path to log file (default: None, uses results/init_aeon_univariate.log)
+    """
+    if log_file is None:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        log_file = os.path.join(RESULTS_DIR, 'init_aeon_univariate.log')
+    else:
+        # Ensure log directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+    
+    # Configure logging
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    logger.info(f"Logging configured: level={logging.getLevelName(log_level)}, file={log_file}")
 
 
 def results_path(filename: str) -> str:
@@ -636,7 +657,6 @@ def process_all_classified_samples(dataset_name, class_label, our_forest,
 
 
 def main():
-    logger.info("Starting init_aeon_univariate main function")
     parser = argparse.ArgumentParser(
         description="Initialize random path worker system with aeon univariate datasets",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -655,7 +675,6 @@ Examples:
   python init_aeon_univariate.py ECG200 --sample-percentage 0.05
         """
     )
-    logger.debug("Argument parser initialized")
 
     parser.add_argument('dataset_name', nargs='?',
                         help='Name of the aeon univariate dataset to load')
@@ -715,8 +734,23 @@ Examples:
                         help='Random seed for reproducibility (default: 42)')
     parser.add_argument('--feature-prefix', type=str, default='t',
                         help='Prefix for feature names (default: "t")')
+    
+    # Logging parameters
+    logging_group = parser.add_argument_group('Logging Parameters')
+    logging_group.add_argument('--log-level', type=str, 
+                              choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                              default='INFO',
+                              help='Logging level (default: INFO)')
+    logging_group.add_argument('--log-file', type=str, default=None,
+                              help='Path to log file (default: results/init_aeon_univariate.log)')
 
     args = parser.parse_args()
+    
+    # Setup logging based on arguments
+    log_level = getattr(logging, args.log_level)
+    setup_logging(log_level=log_level, log_file=args.log_file)
+    
+    logger.info("Starting init_aeon_univariate main function")
     logger.debug(f"Parsed arguments: {args}")
 
     # Handle list datasets

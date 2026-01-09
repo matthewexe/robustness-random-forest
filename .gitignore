@@ -41,3 +41,8 @@ Random_Forest_Aeon_Univariate/results/
 logs/
 *.log
 *.json.log
+
+# Test files
+bdds/
+*.dot
+*.json

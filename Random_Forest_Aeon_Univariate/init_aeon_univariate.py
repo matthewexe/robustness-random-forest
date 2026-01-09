@@ -68,15 +68,28 @@ def setup_logging(log_level=logging.INFO, log_file=None):
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
     
-    # Configure logging
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
+    # Get the root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove any existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Configure file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(log_level)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+    
+    # Configure console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+    
     logger.info(f"Logging configured: level={logging.getLevelName(log_level)}, file={log_file}")
 
 

@@ -42,6 +42,16 @@ def iter_nodes(root):
             stack.append(u.high)
 
 
+def vars_counting(bdd: DD_Function) -> dict[str, int]:
+    return {v: count_vars(bdd, v) for v in bdd.support}
+
+
+def features_counting(bdd: DD_Function) -> dict[str, int]:
+    variables = filter_variables(bdd.support)
+    count = vars_counting(bdd)
+    return {v: count[v] for v in variables}
+
+
 def max_occ_var(f: DD_Function) -> tuple[str, int]:
     logger.debug("Finding variable with maximum occurrences in BDD")
     count = {v: count_vars(f, v) for v in manager.support(f)}
@@ -62,7 +72,7 @@ def path_of(sample: Sample, f: DD_Function, endpoints: Endpoints) -> str:
 
     if is_class(f.var):
         if sample.predicted_label == f.var[1:]:
-            return path_of(sample, f.high, endpoints)+ "1"
+            return path_of(sample, f.high, endpoints) + "1"
         else:
             return path_of(sample, f.low, endpoints) + "0"
 
@@ -70,4 +80,3 @@ def path_of(sample: Sample, f: DD_Function, endpoints: Endpoints) -> str:
         return path_of(sample, f.low, endpoints) + "0"
     else:
         return path_of(sample, f.high, endpoints) + "1"
-

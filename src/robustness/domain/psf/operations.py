@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections import deque
+from collections import deque, Counter
 
 import networkx as nx
 
 import robustness.domain.psf.tableau.model as tb
 from robustness.domain.bdd.manager import get_bdd_manager
-from robustness.domain.bdd.operations import max_occ_var
+from robustness.domain.bdd.operations import features_counting
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd
@@ -154,15 +154,18 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
 
 
 def bdd_best_var(f: PSF) -> tuple[str, int]:
-    memo_max = {}
+    feature_count = Counter()
 
     for leaf in f.leaves:
         leaf_attr = f.nodes[leaf]
         if leaf_attr['kind'] is Kind.BDD:
-            memo_max[leaf] = max_occ_var(leaf_attr['value'])
+            feature_count += Counter(features_counting(leaf_attr['value']))
 
-    max_id = max(memo_max, key=lambda x: memo_max[x][1])
-    return memo_max[max_id]
+    if not feature_count:
+        return "", -1
+
+    max_id = max(feature_count, key=lambda x: feature_count[x])
+    return max_id, feature_count[max_id]
 
 
 # def bdd_best_var(f: PSF) -> tuple[str, int]:

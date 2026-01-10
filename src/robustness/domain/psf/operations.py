@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque, Counter
+from time import perf_counter
 
 import networkx as nx
 
@@ -13,6 +14,7 @@ from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd
 from robustness.domain.psf.tableau.model import TableauTree
 from robustness.domain.tree.model import BinaryTree
 from robustness.domain.tree.operations import map_nodes_of, remove_unconnected_nodes
+from robustness.domain.utils.metrics import log_perf_counter
 
 logger = get_logger(__name__)
 bdd_manager = get_bdd_manager()
@@ -77,7 +79,7 @@ def simplify(tree: BinaryTree) -> BinaryTree:
 #
 #     raise TypeError(f"{type(f)} not recognized.")
 
-
+@log_perf_counter
 def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     global bdd_manager
     logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}, {assignment=}")
@@ -113,7 +115,11 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
             if kind is Kind.BDD:
                 support = bdd_manager.support(value)
                 assign = {v: assignment[v] for v in support if v in assignment}
-                expr = bdd_manager.let(assign, value)
+                if assign:
+                    expr = bdd_manager.let(assign, value)
+                else:
+                    expr = value
+
                 node_id = builder.BDD(expr)
                 nodes_map[node] = (node_id, expr.dag_size <= diagram_size)
         else:
@@ -153,7 +159,7 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     return remove_unconnected_nodes(built_tree, root), last_outcome
 
 
-def bdd_best_var(f: PSF) -> tuple[str, int]:
+def psf_feature_counting(f: PSF) -> dict[str, int]:
     feature_count = Counter()
 
     for leaf in f.leaves:
@@ -161,6 +167,11 @@ def bdd_best_var(f: PSF) -> tuple[str, int]:
         if leaf_attr['kind'] is Kind.BDD:
             feature_count += Counter(features_counting(leaf_attr['value']))
 
+    return feature_count
+
+
+def best_feature(f: PSF) -> tuple[str, int]:
+    feature_count = psf_feature_counting(f)
     if not feature_count:
         return "", -1
 
@@ -187,6 +198,7 @@ def bdd_best_var(f: PSF) -> tuple[str, int]:
 #     raise TypeError(f"{type(f)} not recognized.")
 #
 #
+@log_perf_counter
 def tableau_method(f: PSF) -> TableauTree:
     config = Config()
     tree = tb.Builder()
@@ -194,25 +206,30 @@ def tableau_method(f: PSF) -> TableauTree:
 
     frontier = deque([root])
     while frontier:
-        current = frontier.popleft()
+        current = frontier.pop()
+        logger.info(f"Visiting {current}")
         current_tree = tree.T.nodes[current]['tree']
 
         if is_bdd(current_tree):
+            logger.info(f"BDD found")
             continue
 
-        best_var, best_occ = bdd_best_var(current_tree)
+        # Find best var
+        best_var, best_occ = best_feature(current_tree)
+
+        # Low tree iter
         low_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: False})
         low_id = tree.add_tree(low_tree)
         tree.assign(current, low_id, best_var, False)
         frontier.append(low_id)
 
+        # High tree iter
         high_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: True})
         high_id = tree.add_tree(high_tree)
         tree.assign(current, high_id, best_var, True)
         frontier.append(high_id)
 
     return tree.build()
-
 
 #     logger.debug(f"Applying tableau method on PSF type {type(f).__name__}")
 #     if not tree:
@@ -248,4 +265,3 @@ def tableau_method(f: PSF) -> TableauTree:
 #
 #     logger.debug("Tableau method completed for current node")
 #     return tree
-

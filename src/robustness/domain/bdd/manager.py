@@ -15,6 +15,7 @@ class BDDManager(Singleton):
     def __init__(self, manager: DD_Manager):
         logger.debug("Initializing BDDManager singleton")
         self.manager = manager
+        self.manager.configure(reordering=False)
 
 
 def get_bdd_manager() -> DD_Manager:

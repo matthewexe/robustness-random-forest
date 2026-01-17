@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from collections import deque, Counter
-from time import perf_counter
 
 import networkx as nx
 
 import robustness.domain.psf.tableau.model as tb
-from robustness.domain.bdd.manager import get_bdd_manager
-from robustness.domain.bdd.operations import features_counting
+from robustness.domain.bdd.manager import create_bdd_manager
+from robustness.domain.bdd.operations import features_counting, Not, And
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd
@@ -17,7 +16,6 @@ from robustness.domain.tree.operations import map_nodes_of, remove_unconnected_n
 from robustness.domain.utils.metrics import log_perf_counter
 
 logger = get_logger(__name__)
-bdd_manager = get_bdd_manager()
 
 
 def simplify(tree: BinaryTree) -> BinaryTree:
@@ -81,7 +79,6 @@ def simplify(tree: BinaryTree) -> BinaryTree:
 
 @log_perf_counter
 def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
-    global bdd_manager
     logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}, {assignment=}")
 
     if assignment is None:
@@ -99,36 +96,41 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
         if is_terminal(kind):
             value = attrs['value']
             if kind is Kind.CONSTANT:
-                expr = bdd_manager.true if value else bdd_manager.false
-                node_id = builder.BDD(expr)
+                manager = create_bdd_manager()
+                expr = manager.true if value else manager.false
+                node_id = builder.BDD(manager, expr)
                 nodes_map[node] = (node_id, True)
             if kind is Kind.VARIABLE:
-                expr = bdd_manager.add_expr(value)
+                manager = create_bdd_manager()
+                manager.declare(value)
+                expr = manager.add_expr(value)
                 if value in assignment:
-                    expr = bdd_manager.let({value: assignment[value]}, expr)
-                node_id = builder.BDD(expr)
+                    expr = manager.let({value: assignment[value]}, expr)
+                node_id = builder.BDD(manager, expr)
                 nodes_map[node] = (node_id, True)
             if kind is Kind.CLASS:
-                expr = bdd_manager.add_expr(value)
-                node_id = builder.BDD(expr)
+                manager = create_bdd_manager()
+                manager.declare(value)
+                expr = manager.add_expr(value)
+                node_id = builder.BDD(manager, expr)
                 nodes_map[node] = (node_id, True)
             if kind is Kind.BDD:
-                support = bdd_manager.support(value)
+                bdd_manager, expr = value
+                support = expr.support
                 assign = {v: assignment[v] for v in support if v in assignment}
                 if assign:
-                    expr = bdd_manager.let(assign, value)
-                else:
-                    expr = value
+                    expr = bdd_manager.let(assign, expr)
 
-                node_id = builder.BDD(expr)
+                node_id = builder.BDD(bdd_manager, expr)
                 nodes_map[node] = (node_id, expr.dag_size <= diagram_size)
         else:
             if kind is Kind.NOT:
                 child_id, outcome = nodes_map[f.left(node)]
                 child_attr = builder.T.nodes[child_id]
                 if child_attr['kind'] == Kind.BDD:
-                    expr = bdd_manager.apply("not", child_attr['value'])
-                    node_id = builder.BDD(expr)
+                    manager, expr = child_attr['value']
+                    new_manager, new_expr = Not(manager, expr)
+                    node_id = builder.BDD(new_manager, new_expr)
 
                     nodes_map[node] = (node_id, outcome)
                 else:
@@ -142,15 +144,18 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
                 right_attr = builder.T.nodes[right_child_id]
 
                 if right_outcome and left_outcome:
-                    expr = bdd_manager.apply("and", left_attr['value'], right_attr['value'])
-                    node_id = builder.BDD(expr)
+                    man_left, f_left = left_attr['value']
+                    man_right, f_right = right_attr['value']
+                    new_manager, new_expr = And(man_left, f_left, man_right, f_right)
+                    node_id = builder.BDD(new_manager, new_expr)
 
-                    nodes_map[node] = (node_id, expr.dag_size <= diagram_size)
+                    nodes_map[node] = (node_id, new_expr.dag_size <= diagram_size)
                 else:
                     node_id = builder.And(left_child_id, right_child_id)
                     nodes_map[node] = (node_id, False)
             else:
-                logger.warning(f"Node type {kind} not recognized[id={node}]. Skipping...")
+                logger.critical(f"Node type {kind} not recognized[id={node}]. Skipping...")
+                raise TypeError(f"Node type {kind} not recognized[id={node}].")
 
         root, last_outcome = nodes_map[node]
 
@@ -165,7 +170,8 @@ def psf_feature_counting(f: PSF) -> dict[str, int]:
     for leaf in f.leaves:
         leaf_attr = f.nodes[leaf]
         if leaf_attr['kind'] is Kind.BDD:
-            feature_count += Counter(features_counting(leaf_attr['value']))
+            _, value = leaf_attr['value']
+            feature_count += Counter(features_counting(value))
 
     return feature_count
 

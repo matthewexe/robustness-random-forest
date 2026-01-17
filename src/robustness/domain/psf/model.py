@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TypeAlias
 
-from robustness.domain.bdd import DD_Function
+from robustness.domain.bdd import DD_Function, DD_Manager
 from robustness.domain.logging import get_logger
 from robustness.domain.tree.model import BinaryTree
 
@@ -59,8 +59,8 @@ class Builder:
     def Class(self, name: str) -> int:
         return self.Terminal(Kind.CLASS, name)
 
-    def BDD(self, value: DD_Function) -> int:
-        return self.Terminal(Kind.BDD, value)
+    def BDD(self, manager: DD_Manager, value: DD_Function) -> int:
+        return self.Terminal(Kind.BDD, (manager, value))
 
     # ────────────── operators ──────────────
 
@@ -99,12 +99,14 @@ class Builder:
 def is_terminal(kind: Kind):
     return kind in {Kind.VARIABLE, Kind.CONSTANT, Kind.CLASS, Kind.BDD}
 
+
 def is_bdd(f: PSF):
     if not f.nodes or len(f.nodes) > 1:
         return False
 
     root_attr = f.nodes[f.root]
     return root_attr['kind'] is Kind.BDD
+
 
 def render_formula(f: PSF):
     memo = {}

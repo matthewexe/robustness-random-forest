@@ -1,17 +1,18 @@
 import networkx as nx
 
-from robustness.domain.bdd import DD_Function
+from robustness.domain.bdd import DD_Function, DD_Manager
 from robustness.domain.bdd.dag import BddDag, BddDagBuilder
-from robustness.domain.bdd.manager import get_bdd_manager
+from robustness.domain.bdd.manager import create_bdd_manager
 from robustness.domain.bdd.operations import path_of
 from robustness.domain.logging import get_logger
 from robustness.domain.random_forest import Sample, Endpoints
 from robustness.domain.utils.formula import is_class, get_class_label
 
-manager = get_bdd_manager()
+_manager = create_bdd_manager()
 logger = get_logger(__name__)
 
-def to_dag(bdd: DD_Function) -> BddDag:
+
+def to_dag(manager: DD_Manager, bdd: DD_Function) -> BddDag:
     b = BddDagBuilder(manager)
 
     def rec(root: DD_Function) -> int:
@@ -28,8 +29,8 @@ def to_dag(bdd: DD_Function) -> BddDag:
     return b.build()
 
 
-def construct_robustness_dag(bdd: DD_Function, sample: Sample, path: str):
-    dag = to_dag(bdd)
+def construct_robustness_dag(manager: DD_Manager, bdd: DD_Function, sample: Sample, path: str):
+    dag = to_dag(manager, bdd)
 
     current = dag.root
     while not dag.is_terminal(current):
@@ -56,7 +57,7 @@ def construct_robustness_dag(bdd: DD_Function, sample: Sample, path: str):
     # Set in edges weight of False node to infinity
     import math
     for u, v, data in dag.in_edges(dag.false(), data=True):
-        dag.add_indexed_edge(u,v,index=data['index'], weight=math.inf, label=data['label'])
+        dag.add_indexed_edge(u, v, index=data['index'], weight=math.inf, label=data['label'])
 
     return remove_class_from_dag(sample.predicted_label, dag)
 
@@ -82,8 +83,7 @@ def remove_class_from_dag(class_label: str, dag: BddDag) -> BddDag:
     return new_dag
 
 
-
-def calculate_robustness(bdd: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
+def calculate_robustness(manager: DD_Manager, bdd: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
     if bdd == manager.true:
         return 0
     elif bdd == manager.false:
@@ -93,7 +93,7 @@ def calculate_robustness(bdd: DD_Function, sample: Sample, endpoints: Endpoints)
     path = path_of(sample, bdd, endpoints)
     dag = construct_robustness_dag(bdd, sample, path)
     shortest_path = nx.shortest_path(dag, dag.root, dag.true())
-    logger.info(f"Shortest path: {", ".join(map(str,shortest_path))}")
+    logger.info(f"Shortest path: {", ".join(map(str, shortest_path))}")
 
     # Sum weight of all edges along the path
     path_weight = 0

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from robustness.domain.logging import get_logger
-from robustness.domain.psf.model import render_formula
 from robustness.domain.tree.model import BinaryTree
 
 logger = get_logger(__name__)
+
 
 class Builder:
     T: TableauTree
@@ -15,20 +15,18 @@ class Builder:
         self.next_id = 0
 
     def assign(self, current: int, child: int, var: str, value: bool):
-        self.T.add_edge(current, child, var=var, value=value)
+        self.T.add_edge(current, child, var=var, value=value, label=f"{var}={value}")
 
-    def add_tree(self, new_tree: BinaryTree) -> int:
+    def add_tree(self, new_tree: BinaryTree, best_var: str) -> int:
         node_id = self.next_id
-        formula = render_formula(new_tree)
-        if len(formula) > 200:
-            formula = formula[:197] + "..."
 
-        self.T.add_node(node_id, tree=new_tree, label=formula)
+        self.T.add_node(node_id, tree=new_tree, best_var=best_var, label=f"{node_id} - var:{best_var}")
         self.next_id += 1
         return node_id
 
     def build(self) -> TableauTree:
         return self.T
+
 
 class TableauTree(BinaryTree):
 
@@ -42,7 +40,7 @@ class TableauTree(BinaryTree):
             assignment[data['var']] = data['value']
 
             current = parent
-            parent= self.parent(current)
+            parent = self.parent(current)
 
         return assignment
 

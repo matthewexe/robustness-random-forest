@@ -14,3 +14,4 @@ class Config(Singleton):
     dataset_name: str = "Meat"
     rf_path: str | PathLike[str] = root_path / "Random_Forest_Aeon_Univariate/results"
     debug_mode: bool = False
+    log_graphs: bool = False

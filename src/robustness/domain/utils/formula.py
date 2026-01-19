@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
-from robustness.domain.psf.model import PSF, Kind, is_terminal
+
+if TYPE_CHECKING:
+    from robustness.domain.psf.model import PSF, Kind, is_terminal
 
 logger = get_logger(__name__)
 
@@ -28,13 +30,6 @@ def get_class_label(value: str) -> str:
         return value
 
     return value[1:]
-
-def or_de_morgan(f: PSF):
-    if isinstance(f, PSF):
-        return f
-
-    raise TypeError(f"{type(f)} not recognized.")
-
 
 def filter_variables(variables: Iterable[str]) -> set[str]:
     config = Config()

@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import os.path
 from collections import deque, Counter
+from os import PathLike
 
 import networkx as nx
+from networkx.drawing.nx_agraph import write_dot
 
 import robustness.domain.psf.tableau.model as tb
 from robustness.domain.bdd.manager import create_bdd_manager
-from robustness.domain.bdd.operations import features_counting, Not, And
+from robustness.domain.bdd.operations import features_counting, Not, And, write_bdd
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
-from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd
+from robustness.domain.mappers.bdd import calculate_robustness
+from robustness.domain.psf.model import PSF, Kind, Builder, is_terminal, is_bdd, render_formula
 from robustness.domain.psf.tableau.model import TableauTree
+from robustness.domain.random_forest import Sample, Endpoints
 from robustness.domain.tree.model import BinaryTree
 from robustness.domain.tree.operations import map_nodes_of, remove_unconnected_nodes
 from robustness.domain.utils.metrics import log_perf_counter
@@ -42,44 +47,14 @@ def simplify(tree: BinaryTree) -> BinaryTree:
     return map_nodes_of(nodes_map, root, tree)
 
 
-#
-#
-# def let(f: PSF, reduce: bool = False, **assignment) -> PSF:
-#     logger.debug(f"Applying let operation with {len(assignment)} assignments, reduce={reduce}")
-#     if isinstance(f, Terminal):
-#         if isinstance(f, Variable):
-#             return Constant(assignment[f.value]) if f.value in assignment else f
-#         if isinstance(f, BDD):
-#             global bdd_manager
-#             assign = {v: assignment[v] for v in bdd_manager.support(f.value) if v in assignment}
-#             return BDD(bdd_manager.let(assign, f.value))
-#
-#         return f
-#     if isinstance(f, Not):
-#         sub_formula = let(f.child, reduce=reduce, **assignment)
-#         if isinstance(sub_formula, Constant) and reduce:
-#             return Constant(not sub_formula.value)
-#
-#         return Not(sub_formula)
-#     if isinstance(f, And):
-#         left_formula = let(f.left_child, reduce=reduce, **assignment)
-#         right_formula = let(f.right_child, reduce=reduce, **assignment)
-#
-#         if isinstance(left_formula, Constant) and left_formula.value == False and reduce:
-#             return Constant(False)
-#         if isinstance(right_formula, Constant) and right_formula.value == False and reduce:
-#             return Constant(False)
-#         if isinstance(left_formula, Constant) and isinstance(right_formula, Constant) and reduce:
-#             if left_formula.value == True and right_formula.value == True:
-#                 return Constant(True)
-#
-#         return And(let(f.left_child, reduce=reduce, **assignment), let(f.right_child, reduce=reduce, **assignment))
-#
-#     raise TypeError(f"{type(f)} not recognized.")
-
 @log_perf_counter
-def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
-    logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(f).__name__}, {assignment=}")
+def partial_reduce(psf: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
+    config = Config()
+
+    if not os.path.isdir("logs/bdds") and config.debug_mode:
+        os.makedirs("logs/bdds", exist_ok=True)
+
+    logger.debug(f"Starting partial_reduce with diagram_size={diagram_size}, type={type(psf).__name__}, {assignment=}")
 
     if assignment is None:
         assignment = {}
@@ -90,28 +65,38 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
     root = None
     last_outcome = False
 
-    for node in nx.dfs_postorder_nodes(f):
-        attrs = f.nodes[node]
+    for node in nx.dfs_postorder_nodes(psf):
+        attrs = psf.nodes[node]
         kind = attrs['kind']
         if is_terminal(kind):
             value = attrs['value']
             if kind is Kind.CONSTANT:
-                manager = create_bdd_manager()
+                manager, _ = create_bdd_manager()
                 expr = manager.true if value else manager.false
                 node_id = builder.BDD(manager, expr)
                 nodes_map[node] = (node_id, True)
             if kind is Kind.VARIABLE:
-                manager = create_bdd_manager()
+                manager, new_id_manager = create_bdd_manager()
                 manager.declare(value)
                 expr = manager.add_expr(value)
                 if value in assignment:
                     expr = manager.let({value: assignment[value]}, expr)
                 node_id = builder.BDD(manager, expr)
+
+                # Write BDD to file if in debug mode
+                if config.log_graphs:
+                    write_bdd(manager, expr, new_id_manager)
+
                 nodes_map[node] = (node_id, True)
             if kind is Kind.CLASS:
-                manager = create_bdd_manager()
+                manager, new_id_manager = create_bdd_manager()
                 manager.declare(value)
                 expr = manager.add_expr(value)
+
+                # write BDD to file if in debug mode
+                if config.log_graphs:
+                    write_bdd(manager, expr, new_id_manager)
+
                 node_id = builder.BDD(manager, expr)
                 nodes_map[node] = (node_id, True)
             if kind is Kind.BDD:
@@ -122,23 +107,31 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
                     expr = bdd_manager.let(assign, expr)
 
                 node_id = builder.BDD(bdd_manager, expr)
+
+                # write BDD to file in debug mode
+                if config.log_graphs:
+                    write_bdd(bdd_manager, expr)
+
                 nodes_map[node] = (node_id, expr.dag_size <= diagram_size)
         else:
             if kind is Kind.NOT:
-                child_id, outcome = nodes_map[f.left(node)]
+                child_id, outcome = nodes_map[psf.left(node)]
                 child_attr = builder.T.nodes[child_id]
                 if child_attr['kind'] == Kind.BDD:
                     manager, expr = child_attr['value']
-                    new_manager, new_expr = Not(manager, expr)
+                    new_manager, new_expr, new_id_manager = Not(manager, expr)
                     node_id = builder.BDD(new_manager, new_expr)
+
+                    if config.log_graphs:
+                        write_bdd(new_manager, new_expr, new_id_manager)
 
                     nodes_map[node] = (node_id, outcome)
                 else:
                     node_id = builder.Not(child_id)
                     nodes_map[node] = (node_id, False)
             elif kind is Kind.AND:
-                left_child_id, left_outcome = nodes_map[f.left(node)]
-                right_child_id, right_outcome = nodes_map[f.right(node)]
+                left_child_id, left_outcome = nodes_map[psf.left(node)]
+                right_child_id, right_outcome = nodes_map[psf.right(node)]
 
                 left_attr = builder.T.nodes[left_child_id]
                 right_attr = builder.T.nodes[right_child_id]
@@ -146,8 +139,11 @@ def partial_reduce(f: PSF, diagram_size: int, **assignment) -> tuple[PSF, bool]:
                 if right_outcome and left_outcome:
                     man_left, f_left = left_attr['value']
                     man_right, f_right = right_attr['value']
-                    new_manager, new_expr = And(man_left, f_left, man_right, f_right)
+                    new_manager, new_expr, new_id_manager = And(man_left, f_left, man_right, f_right)
                     node_id = builder.BDD(new_manager, new_expr)
+
+                    if config.log_graphs:
+                        write_bdd(new_manager, new_expr, new_id_manager)
 
                     nodes_map[node] = (node_id, new_expr.dag_size <= diagram_size)
                 else:
@@ -185,30 +181,17 @@ def best_feature(f: PSF) -> tuple[str, int]:
     return max_id, feature_count[max_id]
 
 
-# def bdd_best_var(f: PSF) -> tuple[str, int]:
-#     logger.debug(f"Finding best variable in BDD for type {type(f).__name__}")
-#     if isinstance(f, Terminal):
-#         if isinstance(f, BDD):
-#             return max_occ_var(f.value)
-#         return "", 0
-#     if isinstance(f, UnaryOperator):
-#         return bdd_best_var(f.child)
-#     if isinstance(f, BinaryOperator):
-#         left_var, left_occurrences = bdd_best_var(f.left_child)
-#         right_var, right_occurrences = bdd_best_var(f.right_child)
-#         if left_occurrences >= right_occurrences:
-#             return left_var, left_occurrences
-#
-#         return right_var, right_occurrences
-#
-#     raise TypeError(f"{type(f)} not recognized.")
-#
-#
 @log_perf_counter
 def tableau_method(f: PSF) -> TableauTree:
     config = Config()
+
+    if not os.path.isdir("logs/tableau") and config.debug_mode:
+        os.makedirs("logs/tableau", exist_ok=True)
+
     tree = tb.Builder()
-    root = tree.add_tree(f)
+    root = tree.add_tree(f, "None")
+    if config.log_graphs:
+        write_psf(f, f"{root}_root.dot")
 
     frontier = deque([root])
     while frontier:
@@ -218,6 +201,8 @@ def tableau_method(f: PSF) -> TableauTree:
 
         if is_bdd(current_tree):
             logger.info(f"BDD found")
+            if config.log_graphs:
+                write_psf(current_tree, f"{current}_bdd.dot")
             continue
 
         # Find best var
@@ -225,49 +210,113 @@ def tableau_method(f: PSF) -> TableauTree:
 
         # Low tree iter
         low_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: False})
-        low_id = tree.add_tree(low_tree)
+        low_id = tree.add_tree(low_tree, best_feature(low_tree)[0])
         tree.assign(current, low_id, best_var, False)
         frontier.append(low_id)
 
+        if config.log_graphs:
+            write_psf(low_tree, f"{low_id}_low_{current}_{best_var}.dot")
+
         # High tree iter
         high_tree, _ = partial_reduce(current_tree, config.diagram_size, **{best_var: True})
-        high_id = tree.add_tree(high_tree)
+        high_id = tree.add_tree(high_tree, best_feature(high_tree)[0])
         tree.assign(current, high_id, best_var, True)
         frontier.append(high_id)
 
-    return tree.build()
+        if config.log_graphs:
+            write_psf(high_tree, f"{high_id}_high_{current}_{best_var}.dot")
 
-#     logger.debug(f"Applying tableau method on PSF type {type(f).__name__}")
-#     if not tree:
-#         logger.info("Creating new tableau tree")
-#         current_node = current_node or TableauNode(f)
-#         tree = TableauTree(current_node)
-#     if current_node.is_bdd():
-#         logger.debug("Current node is BDD, returning tree")
-#         return tree
-#
-#     best_var = None
-#     best_var_occ = 0
-#     for leaf in tree.root.leaves:
-#         leaf_var, leaf_occ = bdd_best_var(leaf.psf)
-#         if best_var_occ < leaf_occ:
-#             best_var = leaf_var
-#             best_var_occ = leaf_occ
-#
-#     logger.debug(f"Best variable found: {best_var} with {best_var_occ} occurrences")
-#
-#     config_cls = Config()
-#     best_var_false = {best_var: False}
-#     logger.debug(f"Processing low branch with {best_var}=False")
-#     low_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_false)
-#     low_node = TableauNode(low_psf, current_node, best_var_false)
-#     tableau_method(low_psf, tree, low_node)
-#
-#     best_var_true = {best_var: True}
-#     logger.debug(f"Processing high branch with {best_var}=True")
-#     high_psf, _ = partial_reduce(current_node.psf, config_cls.diagram_size, **best_var_true)
-#     high_node = TableauNode(high_psf, current_node, best_var_true)
-#     tableau_method(high_psf, tree, high_node)
-#
-#     logger.debug("Tableau method completed for current node")
-#     return tree
+    build = tree.build()
+    if config.log_graphs:
+        write_dot(build, os.path.join("logs/tableau", "final_tableau.dot"))
+
+    return build
+
+
+def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
+    memo = {}
+
+    for leaf in t.leaves:
+        leaf_tree = t.nodes[leaf]['tree']
+        leaf_tree_root = leaf_tree.root
+        manager, bdd = leaf_tree.nodes[leaf_tree_root]['value']
+        memo[leaf] = calculate_robustness(manager, bdd, sample, endpoints)
+        parent = t.parent(leaf)
+        current = leaf
+
+        # Calculate path cost to root
+        while parent is not None:
+            edge_data = t.edges[parent, current]
+            var = edge_data['var']
+            path_cost = memo[current]
+            if not edge_data['value']:
+                # Low branch
+                path_cost += 0 if sample.features[var] <= endpoints[var] else 1
+            else:
+                # High branch
+                path_cost += 0 if int(sample.features[var] > endpoints[var]) else 1
+
+            memo[parent] = min(memo.get(parent, float('inf')), path_cost)
+
+            current = parent
+            parent = t.parent(current)
+
+    return memo[t.root]
+
+def generate_robustness_graph(t: TableauTree, sample: Sample, endpoints: Endpoints, filename: PathLike = "robustness_report.dot"):
+    memo_nodes = {}
+    memo_edges = {}
+
+    for leaf in t.leaves:
+        leaf_tree = t.nodes[leaf]['tree']
+        leaf_tree_root = leaf_tree.root
+        attrs = leaf_tree.nodes[leaf_tree_root]
+        manager, bdd = attrs['value']
+        path_cost = calculate_robustness(manager, bdd, sample, endpoints)
+        parent = t.parent(leaf)
+        current = leaf
+        memo_nodes[leaf] = f"{attrs['label']} - Cost: {path_cost}"
+
+        # Calculate path cost to root
+        while parent is not None:
+            edge_data = t.edges[parent, current]
+            var = edge_data['var']
+            if not edge_data['value']:
+                # Low branch
+                path_cost = 0 if sample.features[var] <= endpoints[var] else 1
+            else:
+                # High branch
+                path_cost = 0 if int(sample.features[var] > endpoints[var]) else 1
+
+            memo_nodes[parent] = f"{t.nodes[parent]['best_var']}"
+            memo_edges[(parent, current)] = f"{path_cost}"
+
+            current = parent
+            parent = t.parent(current)
+
+    # Create a new graph to represent the robustness paths
+    import graphviz
+    robustness_graph = graphviz.Digraph(comment="Robustness Graph", format="dot")
+    for node, label in memo_nodes.items():
+        robustness_graph.node(str(node), label=str(label))
+
+    for (src, dst), label in memo_edges.items():
+        robustness_graph.edge(str(src), str(dst), label=str(label))
+
+    # Write as SVG
+    path_root, _ = os.path.splitext(filename)
+    svg_filename = f"{path_root}.svg"
+    path = os.path.join("logs", svg_filename)
+    os.makedirs(os.path.dirname(path) or "logs", exist_ok=True)
+    svg_bytes = robustness_graph.pipe(format="svg")
+    with open(path, "wb") as f:
+        f.write(svg_bytes)
+
+def write_psf(psf: PSF, filename: str) -> None:
+    config = Config()
+    logger.debug(f"Writing PSF to logs/psf/{filename}: {render_formula(psf)}")
+    if not os.path.isdir("logs/psf") and config.debug_mode:
+        os.makedirs("logs/psf", exist_ok=True)
+
+    path = os.path.join("logs/psf", filename)
+    write_dot(psf, path)

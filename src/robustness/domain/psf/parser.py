@@ -84,6 +84,10 @@ def parse_psf(formula_str: str) -> psf.PSF:
     parser = l.Lark(grammar=grammar, parser="lalr")
 
     lark_tree = parser.parse(formula_str)
+    # AST to DOT
+    from lark.tree import pydot__tree_to_dot
+    pydot__tree_to_dot(lark_tree, "logs/initial_psf_ast.dot")
+
     builder = psf.Builder()
     root_id = ast_to_formula(lark_tree.children[0], builder)
     logger.info(f"PSF formula parsed successfully. root_id=[{root_id}]")

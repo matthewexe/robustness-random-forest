@@ -2,15 +2,14 @@ import networkx as nx
 
 from robustness.domain.bdd import DD_Function, DD_Manager
 from robustness.domain.bdd.dag import BddDag, BddDagBuilder
-from robustness.domain.bdd.manager import create_bdd_manager
 from robustness.domain.bdd.operations import path_of
+from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.random_forest import Sample, Endpoints
 from robustness.domain.utils.formula import is_class, get_class_label
 
-_manager = create_bdd_manager()
 logger = get_logger(__name__)
-
+config = Config()
 
 def to_dag(manager: DD_Manager, bdd: DD_Function) -> BddDag:
     b = BddDagBuilder(manager)
@@ -83,17 +82,19 @@ def remove_class_from_dag(class_label: str, dag: BddDag) -> BddDag:
     return new_dag
 
 
-def calculate_robustness(manager: DD_Manager, bdd: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
-    if bdd == manager.true:
+def calculate_robustness(manager: DD_Manager, f: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
+    if f == manager.true:
         return 0
-    elif bdd == manager.false:
+    elif f == manager.false:
         import math
         return math.inf
 
-    path = path_of(sample, bdd, endpoints)
-    dag = construct_robustness_dag(bdd, sample, path)
+    path = path_of(sample, manager, f, endpoints)
+    dag = construct_robustness_dag(manager, f, sample, path)
+    from networkx.drawing.nx_agraph import write_dot
+    write_dot(dag, f"logs/robustness_dags/{int(f)}_robustness_dag.dot")
     shortest_path = nx.shortest_path(dag, dag.root, dag.true())
-    logger.info(f"Shortest path: {", ".join(map(str, shortest_path))}")
+    logger.debug(f"Shortest path: {", ".join(map(str, shortest_path))}")
 
     # Sum weight of all edges along the path
     path_weight = 0

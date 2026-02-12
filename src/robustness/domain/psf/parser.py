@@ -1,7 +1,9 @@
 import robustness.domain.psf as psf
+from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 
 logger = get_logger(__name__)
+config = Config()
 
 """
 Partially Satisfiable Formula Grammar
@@ -35,7 +37,7 @@ NOT.2: "not" | "Not" | "NOT" | "!" | "~"
 
 
 CONSTANT.2: "true" | "false"
-CLASS: /c\d+/
+CLASS: /c(-)?\d+/
 VARIABLE: /t_\d+/
 
 %import common.WS
@@ -52,7 +54,7 @@ def ast_to_formula(lark_tree, builder: psf.Builder) -> int:
         if lark_tree.type == "VARIABLE":
             return builder.Variable(lark_tree.value)
         if lark_tree.type == "CLASS":
-            return builder.Class(lark_tree.value)
+            return builder.Class(lark_tree.value.replace("-", "_"))
     else:
         if lark_tree.data == "start":
             return ast_to_formula(lark_tree.children[0], builder)
@@ -84,9 +86,10 @@ def parse_psf(formula_str: str) -> psf.PSF:
     parser = l.Lark(grammar=grammar, parser="lalr")
 
     lark_tree = parser.parse(formula_str)
-    # AST to DOT
-    from lark.tree import pydot__tree_to_dot
-    pydot__tree_to_dot(lark_tree, "logs/initial_psf_ast.dot")
+    if config.log_graphs:
+        # AST to DOT
+        from lark.tree import pydot__tree_to_dot
+        pydot__tree_to_dot(lark_tree, "logs/psf/initial_psf_ast.dot")
 
     builder = psf.Builder()
     root_id = ast_to_formula(lark_tree.children[0], builder)

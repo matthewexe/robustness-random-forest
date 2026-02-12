@@ -23,7 +23,7 @@ def is_class(value: str) -> bool:
         return False
 
     import re
-    return re.match(r"^(c)?\d+$", value) is not None
+    return re.match(r"^(c)?(_|-)?\d+$", value) is not None
 
 def get_class_label(value: str) -> str:
     if not is_class(value):

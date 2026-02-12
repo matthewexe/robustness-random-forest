@@ -91,8 +91,11 @@ def calculate_robustness(manager: DD_Manager, f: DD_Function, sample: Sample, en
 
     path = path_of(sample, manager, f, endpoints)
     dag = construct_robustness_dag(manager, f, sample, path)
-    from networkx.drawing.nx_agraph import write_dot
-    write_dot(dag, f"logs/robustness_dags/{int(f)}_robustness_dag.dot")
+
+    if config.log_graphs:
+        from networkx.drawing.nx_agraph import write_dot
+        write_dot(dag, f"logs/robustness/bdd_dags/{int(f)}_robustness_dag.dot")
+
     shortest_path = nx.shortest_path(dag, dag.root, dag.true(), weight="weight")
     logger.debug(f"Shortest path for {int(f)}: {", ".join(map(str, shortest_path))}")
 

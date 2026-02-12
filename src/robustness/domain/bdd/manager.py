@@ -56,7 +56,7 @@ def union_manager(*managers_to_union: DD_Manager) -> tuple[DD_Manager, int]:
         logger.debug(f"Sorted variables for union: {all_vars}")
 
     new_manager.declare(*all_vars)
-    logger.info(f"Successfully created union BDD manager with {len(all_vars)} variables")
+    logger.info(f"Successfully created union BDD manager with {len(all_vars)} variables and size")
     return new_manager, new_manager_id
 
 

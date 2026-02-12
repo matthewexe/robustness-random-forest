@@ -306,7 +306,7 @@ def generate_robustness_graph(t: TableauTree, sample: Sample, endpoints: Endpoin
     # Write as SVG
     path_root, _ = os.path.splitext(filename)
     svg_filename = f"{path_root}.svg"
-    path = os.path.join("logs", svg_filename)
+    path = os.path.join("logs/robustness", svg_filename)
     os.makedirs(os.path.dirname(path) or "logs", exist_ok=True)
     svg_bytes = robustness_graph.pipe(format="svg")
     with open(path, "wb") as f:

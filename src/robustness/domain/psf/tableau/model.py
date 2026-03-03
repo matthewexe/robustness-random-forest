@@ -14,8 +14,8 @@ class Builder:
         self.T = TableauTree()
         self.next_id = 0
 
-    def assign(self, current: int, child: int, var: str, value: bool):
-        self.T.add_edge(current, child, var=var, value=value, label=f"{var}={value}")
+    def assign(self, current: int, child: int, var: str, is_high: bool):
+        self.T.add_edge(current, child, var=var, is_high=is_high, label=f"{var}={is_high}")
 
     def add_tree(self, new_tree: BinaryTree, best_var: str) -> int:
         node_id = self.next_id

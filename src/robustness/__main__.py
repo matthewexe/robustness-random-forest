@@ -1,14 +1,12 @@
 import argparse
 
-from networkx.drawing.nx_agraph import write_dot
-
 import robustness.transformers.rf as rftrans
 from robustness.adapters.rf_service import RandomForestService
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.mappers.psf import from_formula_str
 from robustness.domain.mappers.rf import rf_to_formula_str
-from robustness.domain.psf.operations import partial_reduce, tableau_method, write_psf, robustness, \
+from robustness.domain.psf.operations import partial_reduce, tableau_method, log_psf, robustness, \
     generate_robustness_graph
 from robustness.domain.utils.logs import init_log_dirs
 
@@ -46,7 +44,8 @@ def main():
         parser.add_argument("--prefix-var", default="t_", help="Prefix variable in random forest")
         parser.add_argument("--debug", help="Debug mode", action='store_true')
         parser.add_argument("--log-graphs", help="Log graphs", action='store_true')
-        parser.add_argument("--sample-group", help="Group of sample to test robustness on (default: 1)", default=1, type=int)
+        parser.add_argument("--sample-group", help="Group of sample to test robustness on (default: 1)", default=1,
+                            type=int)
         parser.add_argument("--sample-id", help="ID of sample to test robustness on (default: 0)", default=0, type=int)
         # Boolean flag
         parser.add_argument(
@@ -71,7 +70,6 @@ def main():
 
         if config_cls.log_graphs:
             init_log_dirs()
-
 
         # Verbose
         if args.verbose:
@@ -106,7 +104,7 @@ def main():
         # First partial reduction
         logger.info(f"Starting partial reduction with diagram_size={config_cls.diagram_size}")
         if config_cls.log_graphs:
-            write_psf(psf, "initial_psf.dot")
+            log_psf(psf, "initial_psf.svg")
         new_psf, _ = partial_reduce(psf, diagram_size=config_cls.diagram_size)
         logger.info("Partial reduction completed successfully")
         logger.debug(f"Reduced PSF: {new_psf}")
@@ -114,15 +112,9 @@ def main():
         # Tableau method
         logger.info("Applying tableau method")
         tm = tableau_method(new_psf)
-        write_dot(tm, "tableau.dot")
-        logger.debug(f"Tableau tree {tm} generated with root: {tm.root}")
+        tm.save_svg("logs/tableau/tableau_tree.svg")
+        logger.debug(f"Tableau tree {tm} generated with root: {tm.root_id}")
         logger.info("Robustness application completed successfully")
-
-        # leaf_id = list(tm.leaves)[0]
-        # tree = tm.nodes[leaf_id]['tree']
-        # bdd_id = tree.root
-        # bdd = tree.nodes[bdd_id]['value']
-        # get_bdd_manager().dump("bdd.json", roots=[bdd])
 
         # Test sample
         endpoints_schema = rf_adapter.endpoints()

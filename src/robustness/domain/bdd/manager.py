@@ -1,3 +1,5 @@
+from dd.autoref import BDD
+
 from robustness.domain.logging import get_logger
 from robustness.domain.utils.formula import get_variables, get_classes
 from . import DD_Manager
@@ -18,47 +20,31 @@ def int_generator():
 
 id_gen = int_generator()
 
-memo = {}
+__manager: DD_Manager | None = None
 
 
 def get_id_of_manager(manager: DD_Manager) -> int | None:
-    return memo.get(id(manager), None)
+    return id(manager)
 
 
-def create_bdd_manager() -> tuple[DD_Manager, int]:
+def get_bdd_manager() -> DD_Manager:
+    """
+    Singleton pattern for BDD manager instance. If an instance already exists, it returns the existing one.
+
+    Returns: A tuple containing the BDD manager instance and its unique ID.
+
+    """
+    global __manager
+
     logger.debug("Getting BDD manager instance")
-    manager = DD_Manager()
-    if config.debug_mode:
-        manager.configure(reordering=None)
-        logger.debug("BDD manager configured with reordering disabled (debug mode)")
+    if __manager is None:
+        __manager = DD_Manager()
+        __manager.configure(reordering=None)
+        logger.debug("BDD manager created successfully")
     else:
-        logger.debug("BDD manager using default configuration(reordering=true)")
-        manager.configure(reordering=True)
+        logger.debug("BDD manager instance already exists, returning existing instance")
 
-    managers.append(manager)
-    manager_id = next(id_gen)
-    memo[id(manager)] = manager_id
-
-    return manager, manager_id
-
-
-def union_manager(*managers_to_union: DD_Manager) -> tuple[DD_Manager, int]:
-    logger.info("Creating a union of multiple BDD managers")
-    new_manager, new_manager_id = create_bdd_manager()
-    all_vars = set()
-    for man in managers_to_union:
-        all_vars |= man.vars.keys()
-
-    if config.debug_mode:
-        _features = [v for v in all_vars if v.startswith(config.prefix_var)]
-        classes = list(all_vars - set(_features))
-        all_vars = list(sorted(_features)) + list(sorted(classes))
-        logger.debug(f"Sorted variables for union: {all_vars}")
-
-    new_manager.declare(*all_vars)
-    logger.info(f"Successfully created union BDD manager with {len(all_vars)} variables and size")
-    return new_manager, new_manager_id
-
+    return __manager
 
 def declare_vars(bdd: DD_Manager, formula: "robustness.domain.types._PSF_Type"):
     logger.info("Declaring BDD variables from formula")
@@ -78,8 +64,7 @@ def declare_vars(bdd: DD_Manager, formula: "robustness.domain.types._PSF_Type"):
 
 
 def cleanup_bdd_manager():
-    logger.info("Cleaning up BDD managers")
-    for man in managers:
-        man.collect_garbage()
-
-    logger.info("BDD managers cleaned up successfully")
+    logger.info("Cleaning up BDD manager")
+    if __manager is not None:
+        __manager.collect_garbage()
+    logger.info("BDD manager cleaned up successfully")

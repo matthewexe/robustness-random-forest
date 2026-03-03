@@ -9,6 +9,10 @@ root_path = Path().parent.parent.parent.parent
 
 @dataclass
 class Config(Singleton):
+    """
+    Singleton class that store configuration parameters.
+    """
+
     diagram_size: int = 200
     prefix_var: str = "t_"
     dataset_name: str = "Meat"

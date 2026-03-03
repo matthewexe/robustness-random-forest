@@ -3,23 +3,27 @@ from __future__ import annotations
 import networkx as nx
 
 from robustness.domain.bdd import DD_Function, DD_Manager
+from robustness.domain.bdd.manager import get_bdd_manager
 from robustness.domain.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 class BddDag(nx.DiGraph):
+    """
+    Networkx directed graph wrapper that represents an OBDD
+    """
 
     def __init__(self, **attr: object):
         super().__init__(**attr)
 
     @staticmethod
     def true() -> int:
-        return 1
+        return int(get_bdd_manager().true)
 
     @staticmethod
     def false() -> int:
-        return -1
+        return int(get_bdd_manager().false)
 
     def add_node(self, node_for_adding: int, **attrs):
         label = attrs['label'] or ""
@@ -70,14 +74,16 @@ class BddDag(nx.DiGraph):
 
 
 class BddDagBuilder:
+    """
+    Helper class for building a BDD DAG.
+    """
+
     def __init__(self, manager: DD_Manager):
         self._graph = BddDag()
         self._nodes = {int(manager.true), int(manager.false)}
 
         self._graph.add_node(int(manager.true), value=True, label="True")
         self._graph.add_node(int(manager.false), value=False, label="False")
-
-    # ---------- node creation ----------
 
     def new_node_from_bdd(self, bdd: DD_Function, **attrs) -> int:
         if int(bdd) in self._nodes:
@@ -88,20 +94,15 @@ class BddDagBuilder:
         self._nodes.add(int(bdd))
         return node_id
 
-    def terminal(self, value) -> int:
-        return self.new_node(value=value)
-
-    # ---------- edge wiring ----------
-
-    def low(self, parent: int, child: int, weight: float = 1.0) -> BddDagBuilder:
+    def set_low(self, parent: int, child: int, weight: float = 1.0) -> BddDagBuilder:
         self._graph.set_low(parent, child, weight)
         return self
 
-    def high(self, parent: int, child: int, weight: float = 1.0) -> BddDagBuilder:
+    def set_high(self, parent: int, child: int, weight: float = 1.0) -> BddDagBuilder:
         self._graph.set_high(parent, child, weight)
         return self
 
-    def children(
+    def set_children(
             self,
             parent: int,
             low: int | None = None,
@@ -114,8 +115,6 @@ class BddDagBuilder:
         if high is not None:
             self._graph.set_high(parent, high, weight_high)
         return self
-
-    # ---------- access ----------
 
     def build(self) -> BddDag:
         return self._graph

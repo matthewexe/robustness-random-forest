@@ -1,31 +1,41 @@
+from typing import Iterator
+
 from robustness.domain.logging import get_logger
 from robustness.domain.random_forest import Endpoints, Sample
-from robustness.domain.utils.formula import filter_variables, is_class
+from robustness.domain.utils.formula import filter_features, is_class
 from . import DD_Function, DD_Manager
-from .manager import create_bdd_manager, union_manager, get_id_of_manager
 
 logger = get_logger(__name__)
 
 
-def count_vars(f: DD_Function, *variables) -> int:
+def count_vars(bdd: DD_Function, *variables) -> int:
     """
-    Assuming DAG
+    It counts the number of occurrences of the given variables in bdd.
 
     Args:
-        f:
-        *variables:
+        bdd: bdd to analyze
+        *variables: variables to count in the bdd
 
-    Returns:
+    Returns: the count of occurrences of the given variables in the bdd
 
     """
-    count = sum([1 for node in iter_nodes(f) if node.var in variables])
+    count = sum([1 for node in iter_bdd_nodes(bdd) if node.var in variables])
     logger.debug(f"Counted {count} occurrences of {", ".join(variables)} in BDD")
     return count
 
 
-def iter_nodes(root: DD_Function):
+def iter_bdd_nodes(bdd: DD_Function) -> Iterator[DD_Function]:
+    """
+    It returns an iterator that visit BDD nodes in dfs order.
+
+    Args:
+        bdd: bdd node to start the iteration from
+
+    Returns: an iterator that yields BDD nodes in dfs order
+
+    """
     visited = set()
-    stack = [root]
+    stack = [bdd]
 
     while stack:
         u = stack.pop()
@@ -40,110 +50,95 @@ def iter_nodes(root: DD_Function):
             stack.append(u.high)
 
 
-def vars_counting(bdd: DD_Function) -> dict[str, int]:
+def get_vars_counting(bdd: DD_Function) -> dict[str, int]:
+    """
+    Given a BDD, it returns a dictionary that maps each variable with its number of occurrences in the BDD.
+
+    Args:
+        bdd: bdd to analyze
+
+    Returns: a dictionary mapping each variable to its count of occurrences in the BDD
+
+    """
     return {v: count_vars(bdd, v) for v in bdd.support}
 
 
 def features_counting(bdd: DD_Function) -> dict[str, int]:
-    variables = filter_variables(bdd.support)
-    count = vars_counting(bdd)
+    """
+    Given a BDD, it returns a dictionary that maps each feature variable with its number of occurrences in the BDD.
+    It filters out class variables from vars_counting.
+
+    Args:
+        bdd: bdd to analyze
+
+    Returns: a dictionary mapping each feature variable to its count of occurrences in the BDD
+
+    """
+    variables = filter_features(bdd.support)
+    count = get_vars_counting(bdd)
     return {v: count[v] for v in variables}
 
 
-def max_occ_var(f: DD_Function) -> tuple[str, int]:
+def max_occ_var(bdd: DD_Function) -> tuple[str, int]:
+    """
+    Given a BDD, it returns the variable with the maximum number of occurrences in the BDD and its count.
+
+    Args:
+        bdd: bdd to analyze
+
+    Returns: max variable and its count of occurrences in the BDD
+
+    """
     logger.debug("Finding variable with maximum occurrences in BDD")
-    count = {v: count_vars(f, v) for v in f.support}
-    variables = filter_variables(count.keys())
-    if len(variables) == 0:
+    filtered_count = features_counting(bdd)
+
+    if len(filtered_count) == 0:
         logger.debug("No variables found in BDD")
         return "", -1
 
-    filtered_count = {v: count[v] for v in variables}
     best_var = max(filtered_count, key=filtered_count.get)
     logger.debug(f"Best variable: {best_var} with {filtered_count[best_var]} occurrences")
     return best_var, filtered_count[best_var]
 
 
-def path_of(sample: Sample, manager: DD_Manager, f: DD_Function, endpoints: Endpoints) -> str:
+def test_sample(sample: Sample, manager: DD_Manager, f: DD_Function, endpoints: Endpoints) -> str:
+    """
+    Given a sample, a BDD manager, a BDD function and the endpoints universe,
+    it returns a string of bits that represents tha path from BDD root to the leaf of the BDD that corresponds to the sample.
+    The path is encoded as a string of bits, where "0" represents a low edge and "1" represents a high edge.
+
+    Args:
+        sample: the sample to test
+        manager: the BDD manager
+        f: the BDD function
+        endpoints: the endpoints universe
+
+    Returns: path encoding as string of bits
+
+    """
     if f in {manager.false, manager.true}:
         return ""
 
     if is_class(f.var):
         if sample.predicted_label == f.var[1:]:
-            return path_of(sample, manager, f.high, endpoints) + "1"
+            return test_sample(sample, manager, f.high, endpoints) + "1"
         else:
-            return path_of(sample, manager, f.low, endpoints) + "0"
+            return test_sample(sample, manager, f.low, endpoints) + "0"
 
     if sample.features[f.var] <= endpoints[f.var]:
-        return path_of(sample, manager, f.low, endpoints) + "0"
+        return test_sample(sample, manager, f.low, endpoints) + "0"
     else:
-        return path_of(sample, manager,f.high, endpoints) + "1"
+        return test_sample(sample, manager, f.high, endpoints) + "1"
 
 
-def copy_from_to(manager_from: DD_Manager, value: DD_Function, manager_to: DD_Manager) -> DD_Function:
-    """Copy BDD function from one manager to another."""
-    try:
-        expr = value.to_expr()
-        new_value = manager_to.add_expr(expr)
-        return new_value
-    except Exception as e:
-        logger.exception("Failed to copy BDD function between managers")
-        raise e
-
-
-def Not(manager: DD_Manager, value: DD_Function) -> tuple[DD_Manager, DD_Function, int]:
-    """Logical NOT operation on BDD function."""
-    try:
-        if value == manager.true:
-            return manager, manager.false, get_id_of_manager(manager)
-        elif value == manager.false:
-            return manager, manager.true, get_id_of_manager(manager)
-        copy_manager, copy_manager_id = union_manager(manager)
-        new_value = copy_from_to(manager, value, copy_manager)
-        not_new_value = copy_manager.apply("not", new_value)
-        return copy_manager, not_new_value, copy_manager_id
-    except Exception as e:
-        logger.exception("Failed to compute NOT for BDD")
-        raise e
-
-
-def And(manager_left: DD_Manager, left: DD_Function, manager_right: DD_Manager, right: DD_Function) -> tuple[
-    DD_Manager, DD_Function, int]:
-    """Logical AND operation on two BDD functions."""
-    try:
-        if left == manager_left.false or right == manager_right.false:
-            manager, manager_id = create_bdd_manager()
-            return manager, manager.false, manager_id
-        elif left == manager_left.true:
-            copy_manager, copy_manager_id = union_manager(manager_right)
-            new_right = copy_from_to(manager_right, right, copy_manager)
-            return copy_manager, new_right, copy_manager_id
-        elif right == manager_right.true:
-            copy_manager, copy_manager_id = union_manager(manager_left)
-            new_left = copy_from_to(manager_left, left, copy_manager)
-            return copy_manager, new_left, copy_manager_id
-
-        copy_manager, copy_manager_id = union_manager(manager_left, manager_right)
-
-        new_left = copy_from_to(manager_left, left, copy_manager)
-        new_right = copy_from_to(manager_right, right, copy_manager)
-        and_new_value = copy_manager.apply("and", new_left, new_right)
-        return copy_manager, and_new_value, copy_manager_id
-    except Exception as e:
-        logger.exception("Failed to compute AND for BDDs")
-        raise e
-
-
-def write_bdd(manager: DD_Manager, value: DD_Function, id_manager: int | None = None):
-    """Write BDD to DOT file."""
+def write_bdd(manager: DD_Manager, value: DD_Function):
+    """Write BDD to SVG file."""
     try:
         import os
-        if not id_manager:
-            id_manager = get_id_of_manager(manager)
 
-        filename = f"{id_manager}_{int(value)}.dot"
+        filename = f"{int(value)}.dot"
         manager.dump(os.path.join("logs/bdds", filename), roots=[value])
-        logger.info(f"BDD written to DOT file: {filename}")
+        logger.debug(f"BDD written to DOT file: {filename}")
     except Exception as e:
         logger.exception("Failed to write BDD to DOT file")
         raise e

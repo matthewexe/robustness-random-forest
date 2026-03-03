@@ -1,6 +1,7 @@
 import robustness.domain.psf as psf
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
+from robustness.domain.utils.formula import is_class
 
 logger = get_logger(__name__)
 config = Config()
@@ -14,67 +15,72 @@ AND := and | And | && | &
 VAR := \\w+
 """
 
-from lark import Token
-
 grammar = r"""
+    ?start: iff
 
-start: dnf
+    ?iff: xor
+        | iff "~" xor     -> iff_op
 
-?dnf: term
-    | term OR dnf                   
+    ?xor: or
+        | xor "^" or      -> xor_op
 
-?term: literal
-    | literal AND term
+    ?or: and
+       | or "|" and       -> or_op
 
-?literal: NOT VARIABLE
-        | CONSTANT                  
-        | VARIABLE
-        | CLASS              
+    ?and: not
+        | and "&" not     -> and_op
 
-AND.2: "and" | "And" | "AND" | "&&" | "&"
-OR.2:  "or"  | "Or"  | "OR"  | "||" | "|"
-NOT.2: "not" | "Not" | "NOT" | "!" | "~"
+    ?not: "!" not         -> not_op
+        | atom
 
+    ?atom: variable     -> var
+         | true         -> true_const
+         | false        -> false_const
+         | "(" iff ")"  -> parens
 
-CONSTANT.2: "true" | "false"
-CLASS: /c(-)?\d+/
-VARIABLE: /t_\d+/
+    variable: /[a-zA-Z_][a-zA-Z0-9_]*/
+    true: "\\T"
+    false: "\\F"
 
-%import common.WS
-%ignore WS
-%ignore "("
-%ignore ")"
+    %import common.WS
+    %ignore WS
 """
 
 
 def ast_to_formula(lark_tree, builder: psf.Builder) -> int:
-    if isinstance(lark_tree, Token):
-        if lark_tree.type == "CONSTANT":
-            return builder.Constant(lark_tree.value == 'true')
-        if lark_tree.type == "VARIABLE":
-            return builder.Variable(lark_tree.value)
-        if lark_tree.type == "CLASS":
-            return builder.Class(lark_tree.value.replace("-", "_"))
-    else:
-        if lark_tree.data == "start":
-            return ast_to_formula(lark_tree.children[0], builder)
-        if lark_tree.data == "literal":
-            child = lark_tree.children[0]
-            if child.type == "NOT":
-                child = ast_to_formula(lark_tree.children[1], builder)
-                return builder.Not(child)
-            return ast_to_formula(child, builder)
-        if lark_tree.data in {"term", "dnf"}:
-            if len(lark_tree.children) == 0:
-                return ast_to_formula(lark_tree.children[0], builder)
+    match lark_tree.data:
+        case "iff_op":
             left = ast_to_formula(lark_tree.children[0], builder)
-            right = ast_to_formula(lark_tree.children[2], builder)
-            if lark_tree.data == "term":
-                return builder.And(left, right)
-            else:
-                return builder.Or(left, right)
+            right = ast_to_formula(lark_tree.children[1], builder)
+            return builder.Iff(left, right)
+        case "xor_op":
+            left = ast_to_formula(lark_tree.children[0], builder)
+            right = ast_to_formula(lark_tree.children[1], builder)
+            return builder.Xor(left, right)
+        case "or_op":
+            left = ast_to_formula(lark_tree.children[0], builder)
+            right = ast_to_formula(lark_tree.children[1], builder)
+            return builder.Or(left, right)
+        case "and_op":
+            left = ast_to_formula(lark_tree.children[0], builder)
+            right = ast_to_formula(lark_tree.children[1], builder)
+            return builder.And(left, right)
+        case "not_op":
+            child = ast_to_formula(lark_tree.children[0], builder)
+            return builder.Not(child)
+        case "parens":
+            return ast_to_formula(lark_tree.children[0], builder)
+        case "var":
+            var_name = lark_tree.children[0].children[0].value
+            return builder.Variable(var_name) if not is_class(var_name) else builder.Class(var_name)
+        case "true_const":
+            return builder.Constant(True)
+        case "false_const":
+            return builder.Constant(False)
+        case _:
+            logger.warning(f"Unrecognized Lark tree node: {lark_tree.data}")
+            return ast_to_formula(lark_tree.children[0], builder)
 
-    raise ValueError(f"{lark_tree.data} unrecognized")
 
 
 def parse_psf(formula_str: str) -> psf.PSF:
@@ -83,7 +89,7 @@ def parse_psf(formula_str: str) -> psf.PSF:
     logger.info(f"Parsing PSF formula string (length: {len(formula_str)})")
     logger.debug(f"Formula: {formula_str[:200]}..." if len(formula_str) > 200 else f"Formula: {formula_str}")
 
-    parser = l.Lark(grammar=grammar, parser="lalr")
+    parser = l.Lark(grammar=grammar)
 
     lark_tree = parser.parse(formula_str)
     if config.log_graphs:

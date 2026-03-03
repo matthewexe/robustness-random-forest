@@ -1,14 +1,19 @@
+from os import PathLike
 from typing import override, Iterator
 
 import networkx as nx
 
 
 class BinaryTree(nx.DiGraph):
+    """
+    Networkx directed graph wrapper that represents a binary tree.
+    """
+
     def __init__(self, **attr: object):
         super().__init__(**attr)
 
     @property
-    def root(self) -> int | None:
+    def root_id(self) -> int | None:
         for n in self.nodes:
             if self.in_degree(n) == 0:
                 return n
@@ -52,8 +57,17 @@ class BinaryTree(nx.DiGraph):
         self._add_child(parent, child, index=1)
 
     def postorder_iter(self):
-        return nx.dfs_postorder_nodes(self, self.root)
+        return nx.dfs_postorder_nodes(self, self.root_id)
+
+    def get_node_attrs(self, node_id: int) -> dict:
+        return self.nodes[node_id]
 
     @property
     def leaves(self) -> Iterator[int]:
         return (node for node in self.nodes if self.out_degree[node] == 0)
+
+    def save_svg(self, path: PathLike | str):
+        import networkx as nx
+
+        A = nx.nx_agraph.to_agraph(self)
+        A.draw(path, format='svg', prog='dot')

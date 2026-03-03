@@ -3,8 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TypeAlias
 
-from robustness.domain.bdd import DD_Function, DD_Manager
-from robustness.domain.bdd.manager import get_id_of_manager
+from robustness.domain.bdd import DD_Function
 from robustness.domain.logging import get_logger
 from robustness.domain.tree.model import BinaryTree
 
@@ -31,6 +30,10 @@ def int_generator(start=0):
 
 
 class Builder:
+    """
+    Helper class to build PSF formulas
+    """
+
     def __init__(self):
         self.T = BinaryTree()
         self._next_id = 0
@@ -62,8 +65,8 @@ class Builder:
     def Class(self, name: str) -> int:
         return self.Terminal(Kind.CLASS, name, label=f"Class({name})")
 
-    def BDD(self, manager: DD_Manager, value: DD_Function) -> int:
-        return self.Terminal(Kind.BDD, (manager, value), label=f"BDD({get_id_of_manager(manager)}_{int(value)})")
+    def BDD(self, value: DD_Function) -> int:
+        return self.Terminal(Kind.BDD, value, label=f"BDD({int(value)})")
 
     # ────────────── operators ──────────────
 
@@ -82,18 +85,14 @@ class Builder:
         # De Morgan
         return self.Not(self.And(self.Not(left), self.Not(right)))
 
-    # ────────────── accessors ──────────────
+    def Implies(self, left: int, right: int) -> int:
+        return self.Or(self.Not(left), right)
 
-    def left(self, node: int) -> int | None:
-        return self.T.left(node)
+    def Iff(self, left: int, right: int) -> int:
+        return self.And(self.Implies(left, right), self.Implies(right, left))
 
-    def right(self, node: int) -> int | None:
-        return self.T.right(node)
-
-    def parent(self, node: int) -> int | None:
-        return self.T.parent(node)
-
-    # ────────────── export ──────────────
+    def Xor(self, left: int, right: int) -> int:
+        return self.Not(self.Implies(left, right))
 
     def build(self) -> BinaryTree:
         return self.T
@@ -107,7 +106,7 @@ def is_bdd(f: PSF):
     if not f.nodes or len(f.nodes) > 1:
         return False
 
-    root_attr = f.nodes[f.root]
+    root_attr = f.nodes[f.root_id]
     return root_attr['kind'] is Kind.BDD
 
 
@@ -120,7 +119,7 @@ def render_formula(f: PSF):
         kind = attr['kind']
         if is_terminal(kind):
             if kind is Kind.BDD:
-                memo[node] = f"{get_id_of_manager(attr['value'][0])}_{int(attr['value'][1])}"
+                memo[node] = f"{int(attr['value'])}"
             else:
                 memo[node] = str(attr['value'])
         else:
@@ -132,4 +131,4 @@ def render_formula(f: PSF):
                 right_child = f.right(node)
                 memo[node] = f"{memo[left_child]} & {memo[right_child]}"
 
-    return memo[f.root]
+    return memo[f.root_id]

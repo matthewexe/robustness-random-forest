@@ -2,7 +2,8 @@ import networkx as nx
 
 from robustness.domain.bdd import DD_Function, DD_Manager
 from robustness.domain.bdd.dag import BddDag, BddDagBuilder
-from robustness.domain.bdd.operations import path_of
+from robustness.domain.bdd.manager import get_bdd_manager
+from robustness.domain.bdd.operations import test_sample
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.random_forest import Sample, Endpoints
@@ -10,6 +11,7 @@ from robustness.domain.utils.formula import is_class, get_class_label
 
 logger = get_logger(__name__)
 config = Config()
+
 
 def to_dag(manager: DD_Manager, bdd: DD_Function) -> BddDag:
     b = BddDagBuilder(manager)
@@ -21,7 +23,7 @@ def to_dag(manager: DD_Manager, bdd: DD_Function) -> BddDag:
         low_node = rec(root.low)
         high_node = rec(root.high)
         new_node = b.new_node_from_bdd(root)
-        b.children(new_node, low=low_node, high=high_node)
+        b.set_children(new_node, low=low_node, high=high_node)
         return new_node
 
     rec(bdd)
@@ -62,6 +64,16 @@ def construct_robustness_dag(manager: DD_Manager, bdd: DD_Function, sample: Samp
 
 
 def remove_class_from_dag(class_label: str, dag: BddDag) -> BddDag:
+    """
+    It removes all edges from nodes that represent the predicted class to their high child.
+
+    Args:
+        class_label: the predicted class label to remove from the
+        dag: the DAG to modify
+
+    Returns: a new DAG with the specified class removed
+
+    """
     new_dag = dag.copy()
 
     edges_to_remove = set()
@@ -82,14 +94,27 @@ def remove_class_from_dag(class_label: str, dag: BddDag) -> BddDag:
     return new_dag
 
 
-def calculate_robustness(manager: DD_Manager, f: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
+def calculate_bdd_robustness(f: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
+    """
+    Calculates the robustness of a BDD function given a sample.
+
+    Args:
+        manager: the BDD manager
+        f: the BDD function to analyze
+        sample: the sample to test
+        endpoints: the endpoints universe to test the sample against
+
+    Returns: robustness value
+
+    """
+    manager = get_bdd_manager()
     if f == manager.true:
         return 0
     elif f == manager.false:
         import math
         return math.inf
 
-    path = path_of(sample, manager, f, endpoints)
+    path = test_sample(sample, manager, f, endpoints)
     dag = construct_robustness_dag(manager, f, sample, path)
 
     if config.log_graphs:

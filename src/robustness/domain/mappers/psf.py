@@ -1,12 +1,12 @@
+from robustness.domain.logging import get_logger
 from robustness.domain.mappers.rf import rf_to_formula_str
 from robustness.domain.psf.parser import parse_psf
 from robustness.domain.types import _RF_Type, _PSF_Type
-from robustness.domain.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def from_rf(rf: _RF_Type) -> _PSF_Type:
+def from_random_forest(rf: _RF_Type) -> _PSF_Type:
     logger.info("Converting random forest to PSF")
     formula = rf_to_formula_str(rf)
     psf = from_formula_str(formula)

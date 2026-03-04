@@ -178,89 +178,74 @@ def tableau_method(f: PSF) -> TableauTree:
 
 Dato un sample $s$ e un OBDD $f$, la robustezza sull'OBDD è calcolata come segue:
 
-1. Si determina il **percorso** che $s$ compie nell'OBDD per raggiungere il nodo `True`, codificandolo come stringa binaria (0 = ramo low, 1 = ramo high), usando l'*Endpoint Universe* per binarizzare i valori delle feature.
-2. Si costruisce un **DAG di robustezza** a partire dall'OBDD:
-   - Gli archi percorsi da $s$ ricevono peso `0`.
-   - Tutti gli altri archi ricevono peso `1`.
-   - Il ramo *high* del nodo corrispondente alla **variabile di classe** predetta da $s$ viene rimosso.
-   - Gli archi entranti nel nodo `False` ricevono peso $+\infty$.
-3. La robustezza è la **lunghezza del cammino minimo** nel DAG pesato dal nodo radice al nodo `True`.
+1. Si costruisce un **DAG di robustezza** a partire dall'OBDD assegnando i pesi agli archi tramite confronto con l'*Endpoint Universe* (EU):
+   - Nodo feature $x_i$: se $s_{x_i} \leq \mathcal{EU}(x_i)$ → ramo **low** peso `0`, ramo **high** peso `1`; se $s_{x_i} > \mathcal{EU}(x_i)$ → ramo **high** peso `0`, ramo **low** peso `1`.
+   - Nodo classe: ramo **high** → `⊤` (peso `1`), ramo **low** → `⊥` (peso `+∞`).
+   - Il ramo *high* del nodo corrispondente alla **classe predetta** da $s$ viene rimosso.
+2. La robustezza è la **lunghezza del cammino minimo** nel DAG pesato dal nodo radice al nodo `⊤`.
 
-Esempio di DAG di robustezza con 5 feature (`x1`–`x5`) e 3 classi (`c1`, `c2`, `c3`).
-Il sample percorre `x1=high → x3=low → x5=high → c2=low → ⊤` (archi in **grassetto**).
-La classe predetta è `c2`, quindi il suo ramo *high* viene rimosso (non compare nel grafo):
+Esempio con sample $s = \{x_1{:}5.0,\; x_2{:}1.0,\; x_3{:}8.0,\; x_4{:}0.5,\; x_5{:}9.0\}$,
+soglie EU $= \{x_1{:}3.5,\; x_2{:}2.5,\; x_3{:}5.0,\; x_4{:}2.0,\; x_5{:}7.0\}$, classe predetta `c2`.
+
+Confronti EU che determinano i pesi (arco con confronto vero → w=0):
+
+| nodo | confronto        | low | high |
+|------|------------------|-----|------|
+| x1   | 5.0 > EU=3.5     | w=1 | **w=0** |
+| x2   | 1.0 ≤ EU=2.5     | **w=0** | w=1 |
+| x3   | 8.0 > EU=5.0     | w=1 | **w=0** |
+| x4   | 0.5 ≤ EU=2.0     | **w=0** | w=1 |
+| x5   | 9.0 > EU=7.0     | w=1 | **w=0** |
 
 ```mermaid
 graph TD
-    x1((x1))
-    x2a((x2))
-    x2b((x2))
-    x3a((x3))
-    x3b((x3))
-    x4a((x4))
-    x4b((x4))
-    x5a((x5))
-    x5b((x5))
-    c1a((c1))
-    c1b((c1))
-    c2a((c2))
-    c2b((c2))
-    c3a((c3))
-    c3b((c3))
+    x1["x1  EU=3.5"]
+    x2["x2  EU=2.5"]
+    x3["x3  EU=5.0"]
+    x4["x4  EU=2.0"]
+    x5["x5  EU=7.0"]
+    c1(("c1"))
+    c2(("c2"))
+    c3(("c3"))
     T(("⊤"))
-    F(("⊥"))
+    F(("⊥ ∞"))
 
-    x1  -->|"low  w=1"| x2a
-    x1  -->|"high w=0"| x3a
+    x1 -->|"low  w=1"| x5
+    x1 -->|"high w=0"| x2
 
-    x2a -->|"low  w=1"| F
-    x2a -->|"high w=1"| x4a
+    x5 -->|"low  w=1"| F
+    x5 -->|"high w=0"| c1
 
-    x3a -->|"low  w=0"| x5a
-    x3a -->|"high w=1"| x2b
+    x2 -->|"low  w=0"| x3
+    x2 -->|"high w=1"| x5
 
-    x2b -->|"low  w=1"| x4b
-    x2b -->|"high w=1"| x3b
+    x3 -->|"low  w=1"| c1
+    x3 -->|"high w=0"| x4
 
-    x4a -->|"low  w=1"| c3a
-    x4a -->|"high w=1"| c1a
+    x4 -->|"low  w=0"| c2
+    x4 -->|"high w=1"| c3
 
-    x5a -->|"low  w=1"| c3b
-    x5a -->|"high w=0"| c2a
+    c1 -->|"low  w=∞"| F
+    c1 -->|"high w=1"| T
 
-    x3b -->|"low  w=1"| c1b
-    x3b -->|"high w=1"| x4b
+    c2 -->|"low  w=∞"| F
+    %% ramo high di c2 rimosso: è la classe predetta
 
-    x4b -->|"low  w=1"| c2b
-    x4b -->|"high w=1"| F
-
-    c1a -->|"low  w=1"| T
-    c1a -->|"high w=1"| T
-    c1b -->|"low  w=1"| T
-    c1b -->|"high w=1"| T
-
-    c2a -->|"low  w=0"| T
-    %% ramo high di c2a rimosso (classe predetta del sample)
-
-    c2b -->|"low  w=1"| T
-    %% ramo high di c2b rimosso (classe predetta del sample)
-
-    c3a -->|"low  w=1"| T
-    c3a -->|"high w=1"| T
-    c3b -->|"low  w=1"| T
-    c3b -->|"high w=1"| T
+    c3 -->|"low  w=∞"| F
+    c3 -->|"high w=1"| T
 
     style F fill:#f88,stroke:#c00
     style T fill:#8f8,stroke:#080
-    style x1  stroke:#00c,stroke-width:3px
-    style x3a stroke:#00c,stroke-width:3px
-    style x5a stroke:#00c,stroke-width:3px
-    style c2a stroke:#00c,stroke-width:3px
+    style x1 stroke:#00c,stroke-width:3px
+    style x2 stroke:#00c,stroke-width:3px
+    style x3 stroke:#00c,stroke-width:3px
+    style x4 stroke:#00c,stroke-width:3px
+    style c2 stroke:#c00,stroke-width:3px,stroke-dasharray:5 5
 ```
 
-> **Percorso del sample (archi w=0, bordo blu):** `x1 --high→ x3a --low→ x5a --high→ c2a --low→ ⊤` → costo `0+0+0+0 = 0`.
-> I rami `high` di `c2a` e `c2b` sono stati rimossi perché portano alla classe predetta originale.
-> Il cammino alternativo più corto che cambia la classificazione ha costo minimo ≥ 1 (occorre perturbarne almeno una feature).
+> **Percorso del sample (nodi con bordo blu):** `x1 --high(w=0)→ x2 --low(w=0)→ x3 --high(w=0)→ x4 --low(w=0)→ c2` → bloccato (ramo high di `c2` rimosso).
+> Il cammino minimo verso `⊤` è p.es. `x1→x2→x3→x4--high(w=1)→c3--high(w=1)→⊤` con costo `0+0+0+1+1 = 2`.
+> **Robustezza = 2**: occorre perturbare il valore di almeno 2 feature affinché il sample venga classificato diversamente da `c2`.
 
 Tracciamento del percorso del sample nell'OBDD:
 

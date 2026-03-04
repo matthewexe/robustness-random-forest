@@ -187,6 +187,60 @@ Dato un sample $s$ e un OBDD $f$, la robustezza sull'OBDD è calcolata come segu
 Esempio con sample $s = \{x_1{:}5.0,\; x_2{:}1.0,\; x_3{:}8.0,\; x_4{:}0.5,\; x_5{:}9.0\}$,
 soglie EU $= \{x_1{:}3.5,\; x_2{:}2.5,\; x_3{:}5.0,\; x_4{:}2.0,\; x_5{:}7.0\}$, classe predetta `c2`.
 
+**Passo 1 — OBDD originale** (percorso del sample evidenziato in blu):
+
+```mermaid
+graph TD
+    x1(("x1"))
+    x2(("x2"))
+    x3(("x3"))
+    x4(("x4"))
+    x5(("x5"))
+    c1(("c1"))
+    c2(("c2"))
+    c3(("c3"))
+    T(("⊤"))
+    F(("⊥"))
+
+    x1 -->|"low"| x5
+    x1 ==>|"high ✓"| x2
+
+    x5 -->|"low"| F
+    x5 -->|"high"| c1
+
+    x2 ==>|"low ✓"| x3
+    x2 -->|"high"| x5
+
+    x3 -->|"low"| c1
+    x3 ==>|"high ✓"| x4
+
+    x4 ==>|"low ✓"| c2
+    x4 -->|"high"| c3
+
+    c1 -->|"low"| F
+    c1 -->|"high"| T
+
+    c2 -->|"low"| F
+    c2 ==>|"high ✓"| T
+
+    c3 -->|"low"| F
+    c3 -->|"high"| T
+
+    style F fill:#f88,stroke:#c00
+    style T fill:#8f8,stroke:#080
+    style x1 stroke:#00c,stroke-width:3px
+    style x2 stroke:#00c,stroke-width:3px
+    style x3 stroke:#00c,stroke-width:3px
+    style x4 stroke:#00c,stroke-width:3px
+    style c2 stroke:#00c,stroke-width:3px
+```
+
+> **Percorso del sample (archi doppi, bordo blu):** `x1 --high→ x2 --low→ x3 --high→ x4 --low→ c2 --high→ ⊤`
+
+---
+
+**Passo 2 — pesatura degli archi via EU** → costruzione del DAG di robustezza
+
 Confronti EU che determinano i pesi (arco con confronto vero → w=0):
 
 | nodo | confronto        | low | high |

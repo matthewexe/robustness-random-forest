@@ -35,9 +35,51 @@ PSF = (l₁₁ ∧ l₁₂ ∧ … ∧ cK₁) ∨ (l₂₁ ∧ l₂₂ ∧ … �
 
 dove ogni `lᵢⱼ` è un letterale su una variabile di feature (o la sua negazione) e `cKᵢ` è la variabile di **classe** associata alla foglia (ad esempio `c1` per la classe `1`).
 
+La conversione è implementata in `src/robustness/domain/mappers/rf.py`:
+
+```python
+# src/robustness/domain/mappers/rf.py
+
+def rf_to_formula_str(rf: _RF_Type) -> str:
+    # Per ogni albero, enumera tutti i cammini radice-foglia
+    groups = [c for tree in rf for c in dt_to_formula_str(tree.root)]
+    # Ogni cammino diventa una congiunzione di letterali
+    and_expr = [" & ".join(reversed(group)) for group in groups]
+    # La PSF è la disgiunzione di tutti i cammini
+    formula = f"({") | (".join(and_expr)})"
+    return formula
+
+def dt_to_formula_str(root: _DT_Node_Type) -> list[list[str]]:
+    if isinstance(root, _DT_Internal_Type):
+        low_condition  = f"(! {root.feature})"   # feature <= EU[feature] → bit 0
+        high_condition = root.feature              # feature >  EU[feature] → bit 1
+        # ricorsione sui figli e aggiunta della condizione corrente
+        ...
+    if isinstance(root, _DT_Leaf_Type):
+        return [[f"c{root.label}"]]               # variabile di classe
+```
+
 ### Ordered Binary Decision Diagram (OBDD)
 
 Un **OBDD** (*Ordered Binary Decision Diagram*) è una rappresentazione compatta e canonica di una funzione booleana. I nodi interni sono etichettati con variabili booleane e hanno due archi figli: *low* (variabile = 0) e *high* (variabile = 1). I nodi terminali sono `True` (⊤) e `False` (⊥).
+
+Esempio di OBDD per la formula `(x1 ∧ ¬x2) ∨ (¬x1 ∧ x2)` (XOR):
+
+```mermaid
+graph TD
+    x1((x1))
+    x2a((x2))
+    x2b((x2))
+    T(("⊤"))
+    F(("⊥"))
+
+    x1 -->|"0 (low)"| x2a
+    x1 -->|"1 (high)"| x2b
+    x2a -->|"0"| F
+    x2a -->|"1"| T
+    x2b -->|"0"| T
+    x2b -->|"1"| F
+```
 
 La dimensione di un OBDD è misurata dal numero di nodi nel DAG (`dag_size`). La gestione degli OBDD è affidata alla libreria [`dd`](https://github.com/tulip-control/dd).
 
@@ -47,6 +89,27 @@ Poiché la PSF può essere molto grande, non è sempre possibile ridurla diretta
 
 `partial_reduce` può anche ricevere un'assegnazione parziale di variabili: in tal caso specializza la formula applicando l'assegnazione prima della riduzione.
 
+```python
+# src/robustness/domain/psf/operations.py  (estratto semplificato)
+
+def partial_reduce(psf: PSF, diagram_size: int, assignment: dict[str, bool] = None):
+    for psf_node_id in psf.postorder_iter():     # visita bottom-up
+        kind = psf.get_node_attrs(psf_node_id)['kind']
+
+        if kind == Kind.AND:
+            # Tenta di unire i due figli in un OBDD tramite AND booleano
+            if left_is_bdd and right_is_bdd:
+                new_bdd = manager.apply("and", bdd_left, bdd_right)
+                # Tieni il risultato solo se non supera la soglia
+                outcome = new_bdd.dag_size <= diagram_size
+                ...
+            else:
+                # Almeno un figlio non è ancora un OBDD: rimane come nodo AST
+                node_id = builder.And(left_id, right_id)
+        ...
+    return reduced_tree, last_outcome
+```
+
 ### Tableau Method
 
 Il **Tableau Method** estende la riduzione parziale con una strategia di *splitting*: si costruisce un albero (il *Tableau Tree*) dove ogni nodo contiene una PSF parzialmente ridotta.
@@ -54,12 +117,62 @@ Il **Tableau Method** estende la riduzione parziale con una strategia di *splitt
 L'algoritmo opera come segue:
 
 1. Si applica `partial_reduce` alla PSF iniziale.
-2. Se il risultato è già un singolo OBDD, il nodo è una foglia del tableau.
+2. Se il risultato è già un singolo OBDD, il nodo diventa una **foglia** del tableau.
 3. Altrimenti, si sceglie la variabile di feature più frequente negli OBDD della formula (*best feature*) e si creano due nodi figli:
    - **ramo low**: la variabile è assegnata a `False`
    - **ramo high**: la variabile è assegnata a `True`
 4. Per ciascun figlio si riesegue `partial_reduce` con l'assegnazione della variabile prescelta.
 5. Il processo continua ricorsivamente fino a quando ogni foglia contiene un singolo OBDD.
+
+Esempio di Tableau Tree dopo lo splitting su `x3`, poi su `x1`:
+
+```mermaid
+graph TD
+    R["PSF ridotta (nodo 0)"]
+    L["PSF|x3=False (nodo 1)\nOBDD"]
+    H["PSF|x3=True (nodo 2)"]
+    HL["PSF|x3=True,x1=False\nOBDD (nodo 3)"]
+    HH["PSF|x3=True,x1=True\nOBDD (nodo 4)"]
+
+    R -->|"x3 = False, c=0/1"| L
+    R -->|"x3 = True,  c=0/1"| H
+    H -->|"x1 = False, c=0/1"| HL
+    H -->|"x1 = True,  c=0/1"| HH
+```
+
+Implementazione del loop principale del tableau:
+
+```python
+# src/robustness/domain/psf/operations.py
+
+def tableau_method(f: PSF) -> TableauTree:
+    tree = tb.Builder()
+    root = tree.add_tree(f, "Initial Reduced-PSF")
+    frontier = deque([root])
+
+    while frontier:
+        current = frontier.pop()
+        current_tree = tree.T.nodes[current]['tree']
+
+        if is_bdd(current_tree):
+            continue                          # foglia: già un OBDD
+
+        best_var, _ = best_feature(current_tree)  # variabile più frequente
+
+        # Ramo low: assegna best_var = False
+        low_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: False})
+        low_id = tree.add_tree(low_tree, best_feature(low_tree)[0])
+        tree.assign(current, low_id, best_var, False)
+        frontier.append(low_id)
+
+        # Ramo high: assegna best_var = True
+        high_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: True})
+        high_id = tree.add_tree(high_tree, best_feature(high_tree)[0])
+        tree.assign(current, high_id, best_var, True)
+        frontier.append(high_id)
+
+    return tree.build()
+```
 
 ### Calcolo della robustezza su un OBDD
 
@@ -69,9 +182,69 @@ Dato un sample $s$ e un OBDD $f$, la robustezza sull'OBDD è calcolata come segu
 2. Si costruisce un **DAG di robustezza** a partire dall'OBDD:
    - Gli archi percorsi da $s$ ricevono peso `0`.
    - Tutti gli altri archi ricevono peso `1`.
-   - Il ramo *high* del nodo corrispondente alla **variabile di classe** predetta da $s$ viene rimosso (si forza la foresta a classificare diversamente).
-   - Gli archi entranti nel nodo `False` ricevono peso $+\infty$ (il percorso verso `False` non è valido).
+   - Il ramo *high* del nodo corrispondente alla **variabile di classe** predetta da $s$ viene rimosso.
+   - Gli archi entranti nel nodo `False` ricevono peso $+\infty$.
 3. La robustezza è la **lunghezza del cammino minimo** nel DAG pesato dal nodo radice al nodo `True`.
+
+Esempio di DAG di robustezza (il sample ha percorso `x1=high → c1=low`).
+Il ramo `high` di `c1` viene rimosso perché corrisponde alla classe predetta — il percorso verso `⊤` tramite quel ramo non è consentito:
+
+```mermaid
+graph TD
+    x1((x1))
+    c1((c1))
+    T(("⊤"))
+    F(("⊥"))
+
+    x1 -->|"low  w=1"| F
+    x1 -->|"high w=0"| c1
+    c1 -->|"low  w=0"| T
+
+    style F fill:#f88,stroke:#c00
+    style T fill:#8f8,stroke:#080
+```
+
+> **Nota:** il ramo `high` di `c1` è stato rimosso dal grafo perché conduce alla classificazione originale. Il cammino minimo da `x1` a `⊤` è quindi `x1 --high--> c1 --low--> ⊤` con costo totale `0 + 0 = 0`.
+
+Tracciamento del percorso del sample nell'OBDD:
+
+```python
+# src/robustness/domain/bdd/operations.py
+
+def test_sample(sample: Sample, manager: DD_Manager, f: DD_Function, endpoints: Endpoints) -> str:
+    """Restituisce la stringa binaria del percorso radice→True nell'OBDD."""
+    if f in {manager.false, manager.true}:
+        return ""
+    if is_class(f.var):
+        # Variabile di classe: segue il ramo high se la classe predetta corrisponde
+        if sample.predicted_label == f.var[1:]:
+            return test_sample(sample, manager, f.high, endpoints) + "1"
+        else:
+            return test_sample(sample, manager, f.low, endpoints) + "0"
+    # Variabile di feature: confronta con la soglia dell'Endpoint Universe
+    if sample.features[f.var] <= endpoints[f.var]:
+        return test_sample(sample, manager, f.low, endpoints) + "0"
+    else:
+        return test_sample(sample, manager, f.high, endpoints) + "1"
+```
+
+Calcolo della robustezza sull'OBDD tramite shortest path:
+
+```python
+# src/robustness/domain/mappers/bdd.py
+
+def calculate_bdd_robustness(f: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
+    manager = get_bdd_manager()
+    if f == manager.true:   return 0        # già True: robustezza 0
+    if f == manager.false:  return math.inf # mai True: robustezza infinita
+
+    path = test_sample(sample, manager, f, endpoints)
+    dag  = construct_robustness_dag(manager, f, sample, path)
+
+    # Dijkstra / BFS sul DAG pesato
+    shortest_path = nx.shortest_path(dag, dag.root, dag.true(), weight="weight")
+    return sum(dag[u][v].get('weight', 1) for u, v in zip(shortest_path, shortest_path[1:]))
+```
 
 ### Calcolo della robustezza sul Tableau
 
@@ -93,33 +266,60 @@ $$
 
 dove $\pi(r, \ell)$ è il percorso dalla radice alla foglia $\ell$ nel Tableau Tree.
 
+Implementazione della funzione di costo e propagazione:
+
+```python
+# src/robustness/domain/psf/operations.py
+
+def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
+    memo = {}
+
+    for leaf in t.leaves:
+        bdd = t.nodes[leaf]['tree'].nodes[...]['value']
+        memo[leaf] = calculate_bdd_robustness(bdd, sample, endpoints)
+
+        current, parent = leaf, t.parent(leaf)
+        while parent is not None:
+            edge_data = t.edges[parent, current]
+            var        = edge_data['var']
+            path_cost  = memo[current]
+
+            if not edge_data['is_high']:
+                # ramo low: c = 0 se sample[var] <= EU[var], altrimenti 1
+                path_cost += 0 if sample.features[var] <= endpoints[var] else 1
+            else:
+                # ramo high: c = 0 se sample[var] > EU[var], altrimenti 1
+                path_cost += 0 if sample.features[var] > endpoints[var] else 1
+
+            # Prendi il minimo tra i costi già visti per questo nodo
+            memo[parent] = min(memo.get(parent, float('inf')), path_cost)
+            current, parent = parent, t.parent(current)
+
+    return memo[t.root_id]
+```
+
 ---
 
 ## Architettura del sistema e pipeline
 
-```
-Input: Random Forest (JSON) + Endpoint Universe (JSON) + Sample (JSON)
-        │
-        ▼
-[1] RandomForestService          ← legge i file JSON dalla cartella results/
-        │
-        ▼
-[2] rf_to_formula_str            ← encoding: RF → formula PSF come stringa
-        │
-        ▼
-[3] from_formula_str / parse_psf ← parsing: stringa PSF → AST (BinaryTree)
-        │
-        ▼
-[4] partial_reduce               ← riduzione parziale: AST → OBDD (se dim ≤ diagram_size)
-        │
-        ▼
-[5] tableau_method               ← Tableau Method: costruisce il TableauTree
-        │
-        ▼
-[6] robustness                   ← calcola la robustezza del sample sul TableauTree
-        │
-        ▼
-Output: valore intero (numero di bit da modificare per cambiare la classificazione)
+```mermaid
+flowchart TD
+    A["📂 Random Forest JSON\nEndpoint Universe JSON\nSample JSON"]
+    B["RandomForestService\n<i>adapters/rf_service.py</i>"]
+    C["rf_to_formula_str\n<i>mappers/rf.py</i>"]
+    D["parse_psf\n<i>psf/parser.py</i>"]
+    E["partial_reduce\n<i>psf/operations.py</i>"]
+    F["tableau_method\n<i>psf/operations.py</i>"]
+    G["robustness\n<i>psf/operations.py</i>"]
+    H["🔢 Robustezza: intero\n(numero di bit da modificare)"]
+
+    A --> B
+    B -->|"RandomForest + Sample + Endpoints"| C
+    C -->|"stringa PSF"| D
+    D -->|"AST BinaryTree"| E
+    E -->|"PSF ridotta (OBDD + AST)"| F
+    F -->|"TableauTree"| G
+    G --> H
 ```
 
 ### Descrizione dei moduli principali

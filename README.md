@@ -186,25 +186,81 @@ Dato un sample $s$ e un OBDD $f$, la robustezza sull'OBDD è calcolata come segu
    - Gli archi entranti nel nodo `False` ricevono peso $+\infty$.
 3. La robustezza è la **lunghezza del cammino minimo** nel DAG pesato dal nodo radice al nodo `True`.
 
-Esempio di DAG di robustezza (il sample ha percorso `x1=high → c1=low`).
-Il ramo `high` di `c1` viene rimosso perché corrisponde alla classe predetta — il percorso verso `⊤` tramite quel ramo non è consentito:
+Esempio di DAG di robustezza con 5 feature (`x1`–`x5`) e 3 classi (`c1`, `c2`, `c3`).
+Il sample percorre `x1=high → x3=low → x5=high → c2=low → ⊤` (archi in **grassetto**).
+La classe predetta è `c2`, quindi il suo ramo *high* viene rimosso (non compare nel grafo):
 
 ```mermaid
 graph TD
     x1((x1))
-    c1((c1))
+    x2a((x2))
+    x2b((x2))
+    x3a((x3))
+    x3b((x3))
+    x4a((x4))
+    x4b((x4))
+    x5a((x5))
+    x5b((x5))
+    c1a((c1))
+    c1b((c1))
+    c2a((c2))
+    c2b((c2))
+    c3a((c3))
+    c3b((c3))
     T(("⊤"))
     F(("⊥"))
 
-    x1 -->|"low  w=1"| F
-    x1 -->|"high w=0"| c1
-    c1 -->|"low  w=0"| T
+    x1  -->|"low  w=1"| x2a
+    x1  -->|"high w=0"| x3a
+
+    x2a -->|"low  w=1"| F
+    x2a -->|"high w=1"| x4a
+
+    x3a -->|"low  w=0"| x5a
+    x3a -->|"high w=1"| x2b
+
+    x2b -->|"low  w=1"| x4b
+    x2b -->|"high w=1"| x3b
+
+    x4a -->|"low  w=1"| c3a
+    x4a -->|"high w=1"| c1a
+
+    x5a -->|"low  w=1"| c3b
+    x5a -->|"high w=0"| c2a
+
+    x3b -->|"low  w=1"| c1b
+    x3b -->|"high w=1"| x4b
+
+    x4b -->|"low  w=1"| c2b
+    x4b -->|"high w=1"| F
+
+    c1a -->|"low  w=1"| T
+    c1a -->|"high w=1"| T
+    c1b -->|"low  w=1"| T
+    c1b -->|"high w=1"| T
+
+    c2a -->|"low  w=0"| T
+    %% ramo high di c2a rimosso (classe predetta del sample)
+
+    c2b -->|"low  w=1"| T
+    %% ramo high di c2b rimosso (classe predetta del sample)
+
+    c3a -->|"low  w=1"| T
+    c3a -->|"high w=1"| T
+    c3b -->|"low  w=1"| T
+    c3b -->|"high w=1"| T
 
     style F fill:#f88,stroke:#c00
     style T fill:#8f8,stroke:#080
+    style x1  stroke:#00c,stroke-width:3px
+    style x3a stroke:#00c,stroke-width:3px
+    style x5a stroke:#00c,stroke-width:3px
+    style c2a stroke:#00c,stroke-width:3px
 ```
 
-> **Nota:** il ramo `high` di `c1` è stato rimosso dal grafo perché conduce alla classificazione originale. Il cammino minimo da `x1` a `⊤` è quindi `x1 --high--> c1 --low--> ⊤` con costo totale `0 + 0 = 0`.
+> **Percorso del sample (archi w=0, bordo blu):** `x1 --high→ x3a --low→ x5a --high→ c2a --low→ ⊤` → costo `0+0+0+0 = 0`.
+> I rami `high` di `c2a` e `c2b` sono stati rimossi perché portano alla classe predetta originale.
+> Il cammino alternativo più corto che cambia la classificazione ha costo minimo ≥ 1 (occorre perturbarne almeno una feature).
 
 Tracciamento del percorso del sample nell'OBDD:
 

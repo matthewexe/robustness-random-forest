@@ -63,7 +63,7 @@ Poiché la PSF può essere molto grande, non è sempre possibile ridurla diretta
 
 def partial_reduce(psf: PSF, diagram_size: int, assignment: dict[str, bool] = None):
     for psf_node_id in psf.postorder_iter():     # visita bottom-up
-        kind = psf.get_node_attrs(psf_node_id)['kind']
+        kind = psf.get_kind_of(psf_node_id)
 
         if kind == Kind.AND:
             # Tenta di unire i due figli in un OBDD tramite AND booleano
@@ -87,7 +87,7 @@ L'algoritmo opera come segue:
 
 1. Si applica `partial_reduce` alla PSF iniziale.
 2. Se il risultato è già un singolo OBDD, il nodo diventa una **foglia** del tableau.
-3. Altrimenti, si sceglie la variabile di feature più frequente negli OBDD della formula (*best feature*) e si creano due nodi figli:
+3. Altrimenti, si sceglie la feature più frequente negli OBDD della formula (*best feature*) e si creano due nodi figli:
    - **ramo low**: la variabile è assegnata a `False`
    - **ramo high**: la variabile è assegnata a `True`
 4. Per ciascun figlio si riesegue `partial_reduce` con l'assegnazione della variabile prescelta.
@@ -97,16 +97,16 @@ Esempio di Tableau Tree dopo lo splitting su `x3`, poi su `x1`:
 
 ```mermaid
 graph TD
-    R["PSF ridotta (nodo 0)"]
-    L["PSF|x3=False (nodo 1)<br>OBDD"]
-    H["PSF|x3=True (nodo 2)"]
-    HL["PSF|x3=True,x1=False<br>OBDD (nodo 3)"]
-    HH["PSF|x3=True,x1=True<br>OBDD (nodo 4)"]
+    R["PSF ridotta"]
+    L["PSF|x3=False<br>OBDD"]
+    H["PSF|x3=True"]
+    HL["PSF|x3=True,x1=False<br>OBDD"]
+    HH["PSF|x3=True,x1=True<br>OBDD"]
 
-    R -->|"x3 = False, c=0/1"| L
-    R -->|"x3 = True,  c=0/1"| H
-    H -->|"x1 = False, c=0/1"| HL
-    H -->|"x1 = True,  c=0/1"| HH
+    R -->|"x3 = False"| L
+    R -->|"x3 = True"| H
+    H -->|"x1 = False"| HL
+    H -->|"x1 = True"| HH
 ```
 
 Implementazione del loop principale del tableau:
@@ -116,27 +116,27 @@ Implementazione del loop principale del tableau:
 
 def tableau_method(f: PSF) -> TableauTree:
    tree = tb.Builder()
-   root = tree.add_tree(f, "Initial Reduced-PSF")
+   root = tree.add_psf(f, "Initial Reduced-PSF")
    frontier = deque([root])
 
    while frontier:
       current = frontier.pop()
-      current_tree = tree.current_psf.nodes[current]['tree']
+      current_psf = tree.current_tree.get_psf_of(current)
 
-      if is_bdd(current_tree):
+      if is_bdd(current_psf):
          continue  # foglia: già un OBDD
 
-      best_var, _ = best_feature(current_tree)  # variabile più frequente
+      best_var, _ = best_feature(current_psf)  # variabile più frequente
 
       # Ramo low: assegna best_var = False
-      low_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: False})
-      low_id = tree.add_tree(low_tree, best_feature(low_tree)[0])
+      low_tree, _ = partial_reduce(current_psf, config.diagram_size, {best_var: False})
+      low_id = tree.add_psf(low_tree, best_feature(low_tree)[0])
       tree.assign(current, low_id, best_var, False)
       frontier.append(low_id)
 
       # Ramo high: assegna best_var = True
-      high_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: True})
-      high_id = tree.add_tree(high_tree, best_feature(high_tree)[0])
+      high_tree, _ = partial_reduce(current_psf, config.diagram_size, {best_var: True})
+      high_id = tree.add_psf(high_tree, best_feature(high_tree)[0])
       tree.assign(current, high_id, best_var, True)
       frontier.append(high_id)
 
@@ -339,16 +339,17 @@ def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
     memo = {}
 
     for leaf in t.leaves:
-        bdd = t.nodes[leaf]['tree'].nodes[...]['value']
+        leaf_psf = t.get_psf_of(leaf)
+        bdd = leaf_psf.get_value_of(leaf_psf.root_id)
         memo[leaf] = calculate_bdd_robustness(bdd, sample, endpoints)
 
-        current, parent = leaf, t.parent(leaf)
+        parent = t.parent(leaf)
+        current = leaf
         while parent is not None:
-            edge_data = t.edges[parent, current]
-            var        = edge_data['var']
+            var, assignment = t.get_edge_assignment(parent, current)
             path_cost  = memo[current]
 
-            if not edge_data['is_high']:
+            if not assignment:
                 # ramo low: c = 0 se sample[var] <= EU[var], altrimenti 1
                 path_cost += 0 if sample.features[var] <= endpoints[var] else 1
             else:
@@ -357,7 +358,8 @@ def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
 
             # Prendi il minimo tra i costi già visti per questo nodo
             memo[parent] = min(memo.get(parent, float('inf')), path_cost)
-            current, parent = parent, t.parent(current)
+            current = parent
+            parent = t.parent(current)
 
     return memo[t.root_id]
 ```

@@ -427,44 +427,6 @@ flowchart TD
 
 ---
 
-## Struttura del repository
-
-```
-robustness-random-forest/
-├── Random_Forest_Aeon_Univariate/   # Componente del professore
-│   ├── init_aeon_univariate.py      # Script per addestrare la RF e generare i file
-│   ├── forest.py                    # Struttura dati Random Forest
-│   ├── tree.py                      # Struttura dati Decision Tree
-│   ├── eu.py                        # Calcolo dell'Endpoint Universe
-│   ├── sample.py                    # Serializzazione dei campioni
-│   └── results/                     # Output: RF, endpoint universe, sample JSON
-│
-├── src/
-│   └── robustness/
-│       ├── __main__.py              # Entry point CLI
-│       ├── adapters/                # Lettura file (RandomForestService)
-│       ├── domain/
-│       │   ├── random_forest.py     # Modelli di dominio (RandomForest, Sample, Endpoints)
-│       │   ├── bdd/                 # Gestione OBDD (dd library wrapper)
-│       │   ├── psf/
-│       │   │   ├── model.py         # Modello PSF (AST con Builder)
-│       │   │   ├── parser.py        # Parser formula PSF
-│       │   │   ├── operations.py    # partial_reduce, tableau_method, robustness
-│       │   │   └── tableau/         # Modello TableauTree
-│       │   ├── mappers/
-│       │   │   ├── rf.py            # RF → formula PSF
-│       │   │   ├── psf.py           # stringa → PSF
-│       │   │   └── bdd.py           # Calcolo robustezza su OBDD
-│       │   └── tree/                # Struttura BinaryTree generica
-│       └── schemas/                 # Schemi Pydantic per i file JSON
-│
-├── tests/                           # Test unitari
-├── pyproject.toml                   # Configurazione progetto e dipendenze
-└── README.md
-```
-
----
-
 ## Installazione
 
 ### Con Poetry (consigliato)

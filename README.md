@@ -32,22 +32,22 @@ dove ogni `lᵢⱼ` è un letterale su una variabile di feature (o la sua negazi
 
 La funzione `parse_psf` utilizza una grammatica [Lark](https://github.com/lark-parser/lark) per analizzare la stringa PSF. La grammatica supporta i seguenti operatori booleani:
 
-| Operatore | Simbolo |
-|---|---|
-| IFF (biconditionale) | `~` |
-| XOR | `^` |
-| OR | `\|` |
-| AND | `&` |
-| NOT | `!` |
+| Operatore            | Simbolo |
+|----------------------|---------|
+| IFF (biconditionale) | `~`     |
+| XOR                  | `^`     |
+| OR                   | `\|`    |
+| AND                  | `&`     |
+| NOT                  | `!`     |
 
 Una volta completato il parsing, **tutti gli operatori vengono tradotti in termini di AND (`∧`) e NOT (`¬`)** usando le seguenti equivalenze logiche:
 
-| Operatore originale | Traduzione in AND/NOT |
-|---|---|
-| `A ∨ B` (OR) | `¬(¬A ∧ ¬B)` (De Morgan) |
-| `A → B` (IMPLIES) | `¬(A ∧ ¬B)` |
-| `A ↔ B` (IFF) | `(¬(A ∧ ¬B)) ∧ (¬(B ∧ ¬A))` |
-| `A ⊕ B` (XOR, `^`) | `A ∧ ¬B` |
+| Operatore originale | Traduzione               |
+|---------------------|--------------------------|
+| `A ∨ B` (OR)        | `¬(¬A ∧ ¬B)` (De Morgan) |
+| `A → B` (IMPLIES)   | `¬A ∨ B`                 |
+| `A ↔ B` (IFF)       | `(A → B) ∧ (B → A)`      |
+| `A ⊕ B` (XOR, `^`)  | `¬(A ↔ B)`               |
 
 Di conseguenza, l'AST risultante dal parsing contiene esclusivamente nodi di tipo **AND** e **NOT** (oltre ai nodi terminali: variabili, classi e costanti booleane). Questo semplifica le fasi successive di riduzione e applicazione del Tableau Method, che operano solo su questi due operatori.
 
@@ -237,13 +237,13 @@ graph TD
 
 Confronti EU che determinano i pesi (arco con confronto vero → w=0):
 
-| nodo | confronto        | low | high |
-|------|------------------|-----|------|
-| x1   | 5.0 > EU=3.5     | w=1 | **w=0** |
-| x2   | 1.0 ≤ EU=2.5     | **w=0** | w=1 |
-| x3   | 8.0 > EU=5.0     | w=1 | **w=0** |
-| x4   | 0.5 ≤ EU=2.0     | **w=0** | w=1 |
-| x5   | 9.0 > EU=7.0     | w=1 | **w=0** |
+| nodo | confronto    | low     | high    |
+|------|--------------|---------|---------|
+| x1   | 5.0 > EU=3.5 | w=1     | **w=0** |
+| x2   | 1.0 ≤ EU=2.5 | **w=0** | w=1     |
+| x3   | 8.0 > EU=5.0 | w=1     | **w=0** |
+| x4   | 0.5 ≤ EU=2.0 | **w=0** | w=1     |
+| x5   | 9.0 > EU=7.0 | w=1     | **w=0** |
 
 ```mermaid
 graph TD
@@ -415,15 +415,15 @@ flowchart TD
 
 ### Descrizione dei moduli principali
 
-| Modulo | Percorso | Responsabilità |
-|---|---|---|
-| `RandomForestService` | `src/robustness/adapters/rf_service.py` | Lettura dei file JSON prodotti dal componente del professore |
-| `rf_to_formula_str` | `src/robustness/domain/mappers/rf.py` | Conversione RF → formula PSF |
-| `parse_psf` | `src/robustness/domain/psf/parser.py` | Parsing della formula PSF → AST (tutti gli operatori tradotti in AND e NOT) |
-| `partial_reduce` | `src/robustness/domain/psf/operations.py` | Riduzione parziale PSF → OBDD |
-| `tableau_method` | `src/robustness/domain/psf/operations.py` | Costruzione del Tableau Tree |
-| `robustness` | `src/robustness/domain/psf/operations.py` | Calcolo della robustezza sul Tableau |
-| `calculate_bdd_robustness` | `src/robustness/domain/mappers/bdd.py` | Calcolo della robustezza su un singolo OBDD |
+| Modulo                     | Percorso                                  | Responsabilità                                                              |
+|----------------------------|-------------------------------------------|-----------------------------------------------------------------------------|
+| `RandomForestService`      | `src/robustness/adapters/rf_service.py`   | Lettura dei file JSON prodotti dal componente del professore                |
+| `rf_to_formula_str`        | `src/robustness/domain/mappers/rf.py`     | Conversione RF → formula PSF                                                |
+| `parse_psf`                | `src/robustness/domain/psf/parser.py`     | Parsing della formula PSF → AST (tutti gli operatori tradotti in AND e NOT) |
+| `partial_reduce`           | `src/robustness/domain/psf/operations.py` | Riduzione parziale PSF → OBDD                                               |
+| `tableau_method`           | `src/robustness/domain/psf/operations.py` | Costruzione del Tableau Tree                                                |
+| `robustness`               | `src/robustness/domain/psf/operations.py` | Calcolo della robustezza sul Tableau                                        |
+| `calculate_bdd_robustness` | `src/robustness/domain/mappers/bdd.py`    | Calcolo della robustezza su un singolo OBDD                                 |
 
 ---
 
@@ -538,12 +538,12 @@ python -m robustness \
 
 ### Parametri CLI principali
 
-| Parametro | Descrizione | Default |
-|---|---|---|
-| `--dataset-name`, `-dn` | Nome del dataset Aeon usato per addestrare la RF | `Meat` |
-| `--rf-path` | Cartella contenente i file JSON della RF | `./Random_Forest_Aeon_Univariate/results` |
-| `--sample-group` | Gruppo del campione da testare | `1` |
-| `--sample-id` | ID del campione nel gruppo | `0` |
-| `--diagram-size`, `-dd` | Dimensione massima dell'OBDD nella riduzione parziale | `50` |
-| `--log-graphs` | Salva i grafi SVG nella cartella `logs/` | `False` |
-| `--debug` | Abilita la modalità debug (include `--log-graphs`) | `False` |
+| Parametro               | Descrizione                                           | Default                                   |
+|-------------------------|-------------------------------------------------------|-------------------------------------------|
+| `--dataset-name`, `-dn` | Nome del dataset Aeon usato per addestrare la RF      | `Meat`                                    |
+| `--rf-path`             | Cartella contenente i file JSON della RF              | `./Random_Forest_Aeon_Univariate/results` |
+| `--sample-group`        | Gruppo del campione da testare                        | `1`                                       |
+| `--sample-id`           | ID del campione nel gruppo                            | `0`                                       |
+| `--diagram-size`, `-dd` | Dimensione massima dell'OBDD nella riduzione parziale | `50`                                      |
+| `--log-graphs`          | Salva i grafi SVG nella cartella `logs/`              | `False`                                   |
+| `--debug`               | Abilita la modalità debug (include `--log-graphs`)    | `False`                                   |

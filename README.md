@@ -129,10 +129,10 @@ Esempio di Tableau Tree dopo lo splitting su `x3`, poi su `x1`:
 ```mermaid
 graph TD
     R["PSF ridotta (nodo 0)"]
-    L["PSF|x3=False (nodo 1)\nOBDD"]
+    L["PSF|x3=False (nodo 1)<br>OBDD"]
     H["PSF|x3=True (nodo 2)"]
-    HL["PSF|x3=True,x1=False\nOBDD (nodo 3)"]
-    HH["PSF|x3=True,x1=True\nOBDD (nodo 4)"]
+    HL["PSF|x3=True,x1=False<br>OBDD (nodo 3)"]
+    HH["PSF|x3=True,x1=True<br>OBDD (nodo 4)"]
 
     R -->|"x3 = False, c=0/1"| L
     R -->|"x3 = True,  c=0/1"| H
@@ -399,14 +399,14 @@ def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
 
 ```mermaid
 flowchart TD
-    A["📂 Random Forest JSON\nEndpoint Universe JSON\nSample JSON"]
-    B["RandomForestService\n<i>adapters/rf_service.py</i>"]
-    C["rf_to_formula_str\n<i>mappers/rf.py</i>"]
-    D["parse_psf\n<i>psf/parser.py</i>"]
-    E["partial_reduce\n<i>psf/operations.py</i>"]
-    F["tableau_method\n<i>psf/operations.py</i>"]
-    G["robustness\n<i>psf/operations.py</i>"]
-    H["🔢 Robustezza: intero\n(numero di bit da modificare)"]
+    A["📂 Random Forest JSON<br>Endpoint Universe JSON<br>Sample JSON"]
+    B["RandomForestService<br><i>adapters/rf_service.py</i>"]
+    C["rf_to_formula_str<br><i>mappers/rf.py</i>"]
+    D["parse_psf<br><i>psf/parser.py</i>"]
+    E["partial_reduce<br><i>psf/operations.py</i>"]
+    F["tableau_method<br><i>psf/operations.py</i>"]
+    G["robustness<br><i>psf/operations.py</i>"]
+    H["🔢 Robustezza: intero<br>(numero di bit da modificare)"]
 
     A --> B
     B -->|"RandomForest + Sample + Endpoints"| C

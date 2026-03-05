@@ -87,7 +87,7 @@ L'algoritmo opera come segue:
 
 1. Si applica `partial_reduce` alla PSF iniziale.
 2. Se il risultato è già un singolo OBDD, il nodo diventa una **foglia** del tableau.
-3. Altrimenti, si sceglie la variabile di feature più frequente negli OBDD della formula (*best feature*) e si creano due nodi figli:
+3. Altrimenti, si sceglie la feature più frequente negli OBDD della formula (*best feature*) e si creano due nodi figli:
    - **ramo low**: la variabile è assegnata a `False`
    - **ramo high**: la variabile è assegnata a `True`
 4. Per ciascun figlio si riesegue `partial_reduce` con l'assegnazione della variabile prescelta.
@@ -97,16 +97,16 @@ Esempio di Tableau Tree dopo lo splitting su `x3`, poi su `x1`:
 
 ```mermaid
 graph TD
-    R["PSF ridotta (nodo 0)"]
-    L["PSF|x3=False (nodo 1)<br>OBDD"]
-    H["PSF|x3=True (nodo 2)"]
-    HL["PSF|x3=True,x1=False<br>OBDD (nodo 3)"]
-    HH["PSF|x3=True,x1=True<br>OBDD (nodo 4)"]
+    R["PSF ridotta"]
+    L["PSF|x3=False<br>OBDD"]
+    H["PSF|x3=True"]
+    HL["PSF|x3=True,x1=False<br>OBDD"]
+    HH["PSF|x3=True,x1=True<br>OBDD"]
 
-    R -->|"x3 = False, c=0/1"| L
-    R -->|"x3 = True,  c=0/1"| H
-    H -->|"x1 = False, c=0/1"| HL
-    H -->|"x1 = True,  c=0/1"| HH
+    R -->|"x3 = False"| L
+    R -->|"x3 = True"| H
+    H -->|"x1 = False"| HL
+    H -->|"x1 = True"| HH
 ```
 
 Implementazione del loop principale del tableau:

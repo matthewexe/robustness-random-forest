@@ -6,6 +6,7 @@ T = TypeVar("T")
 
 logger = get_logger(__name__)
 
+
 def from_json(json_content: str, cls: T) -> T:
     from pydantic import TypeAdapter
 
@@ -16,4 +17,3 @@ def from_json(json_content: str, cls: T) -> T:
     result = adapter.validate_json(json_content)
     logger.info(f"Successfully deserialized JSON to {cls}")
     return result
-

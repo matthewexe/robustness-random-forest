@@ -1,5 +1,3 @@
-from dd.autoref import BDD
-
 from robustness.domain.logging import get_logger
 from robustness.domain.utils.formula import get_variables, get_classes
 from . import DD_Manager
@@ -45,6 +43,7 @@ def get_bdd_manager() -> DD_Manager:
         logger.debug("BDD manager instance already exists, returning existing instance")
 
     return __manager
+
 
 def declare_vars(bdd: DD_Manager, formula: "robustness.domain.types._PSF_Type"):
     logger.info("Declaring BDD variables from formula")

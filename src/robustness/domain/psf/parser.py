@@ -82,7 +82,6 @@ def ast_to_formula(lark_tree, builder: psf.Builder) -> int:
             return ast_to_formula(lark_tree.children[0], builder)
 
 
-
 def parse_psf(formula_str: str) -> psf.PSF:
     import lark as l
 

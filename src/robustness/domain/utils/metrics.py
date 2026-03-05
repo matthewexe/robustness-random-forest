@@ -1,7 +1,7 @@
 from functools import wraps
+from time import perf_counter
 
 from robustness.domain.logging import get_logger
-from time import perf_counter
 
 
 def log_perf_counter(f):

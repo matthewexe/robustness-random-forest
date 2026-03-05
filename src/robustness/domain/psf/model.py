@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TypeAlias
+from typing import TypeAlias, Any
 
 from robustness.domain.bdd import DD_Function
 from robustness.domain.logging import get_logger
 from robustness.domain.tree.model import BinaryTree
 
-PSF: TypeAlias = BinaryTree
+# PSF: TypeAlias = BinaryTree
 
+class PSF(BinaryTree):
+    """
+    Propositional Symbolic Formula (PSF) represented as a binary tree.
+    Each node has a 'kind' attribute that indicates the type of the node (e.g., variable, constant, operator).
+    """
+
+    def get_value_of(self, node_id: int) -> Any:
+        attrs = self.get_node_attrs(node_id)
+        if "value" not in attrs:
+            return None
+
+        return attrs["value"]
+
+    def get_kind_of(self, node_id: int) -> Kind:
+        return self.get_node_attrs(node_id)["kind"]
 
 class Kind(Enum):
     CONSTANT = "Constant"
@@ -35,7 +50,7 @@ class Builder:
     """
 
     def __init__(self):
-        self.T = BinaryTree()
+        self.current_psf = PSF()
         self._next_id = 0
 
     # ────────────── core ──────────────
@@ -44,17 +59,13 @@ class Builder:
         nid = self._next_id
         self._next_id += 1
         attrs["label"] = f'{nid} - {attrs.get("label", "")}'
-        self.T.add_node(nid, **attrs)
+        self.current_psf.add_node(nid, **attrs)
         return nid
 
     # ────────────── terminals ──────────────
 
-    def Terminal(self, kind: Kind, value, label: str = None) -> int:
-        return self._new_node(
-            kind=kind,
-            value=value,
-            label=label
-        )
+    def Terminal(self, kind: Kind, value, label: str | None = None) -> int:
+        return self._new_node(kind=kind, value=value, label=label)
 
     def Constant(self, value: bool) -> int:
         return self.Terminal(Kind.CONSTANT, value, label=str(value))
@@ -72,13 +83,13 @@ class Builder:
 
     def Not(self, child: int) -> int:
         n = self._new_node(kind=Kind.NOT, label="Not")
-        self.T.add_left(n, child)
+        self.current_psf.add_left(n, child)
         return n
 
     def And(self, left: int, right: int) -> int:
         n = self._new_node(kind=Kind.AND, label="And")
-        self.T.add_left(n, left)
-        self.T.add_right(n, right)
+        self.current_psf.add_left(n, left)
+        self.current_psf.add_right(n, right)
         return n
 
     def Or(self, left: int, right: int) -> int:
@@ -95,7 +106,7 @@ class Builder:
         return self.Not(self.Implies(left, right))
 
     def build(self) -> BinaryTree:
-        return self.T
+        return self.current_psf
 
 
 def is_terminal(kind: Kind):
@@ -106,22 +117,22 @@ def is_bdd(f: PSF):
     if not f.nodes or len(f.nodes) > 1:
         return False
 
-    root_attr = f.nodes[f.root_id]
-    return root_attr['kind'] is Kind.BDD
+    return f.get_kind_of(f.root_id) is Kind.BDD
 
 
 def render_formula(f: PSF):
     memo = {}
 
     for node in f.postorder_iter():
-        attr = f.nodes[node]
+        attr = f.get_node_attrs(node)
 
-        kind = attr['kind']
+        kind = f.get_kind_of(node)
         if is_terminal(kind):
+            value = f.get_value_of(node)
             if kind is Kind.BDD:
-                memo[node] = f"{int(attr['value'])}"
+                memo[node] = f"{int(value)}"
             else:
-                memo[node] = str(attr['value'])
+                memo[node] = str(value)
         else:
             if kind is Kind.NOT:
                 child = f.left(node)

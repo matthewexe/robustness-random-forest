@@ -62,6 +62,9 @@ class BinaryTree(nx.DiGraph):
     def get_node_attrs(self, node_id: int) -> dict:
         return self.nodes[node_id]
 
+    def get_label_of(self, node_id: int) -> str:
+        return self.nodes[node_id].get("label", "")
+
     @property
     def leaves(self) -> Iterator[int]:
         return (node for node in self.nodes if self.out_degree[node] == 0)

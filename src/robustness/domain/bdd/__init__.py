@@ -1,4 +1,6 @@
+from typing import TypeAlias
+
 import dd
 
-DD_Function = dd.autoref.Function
-DD_Manager = dd.autoref.BDD
+DD_Function: TypeAlias = dd.autoref.Function
+DD_Manager: TypeAlias = dd.autoref.BDD

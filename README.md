@@ -2,22 +2,14 @@
 
 ## Panoramica del progetto
 
-Questo progetto implementa un sistema per il calcolo della **robustezza** di un classificatore *Random Forest* su dati multiclasse. L'obiettivo è determinare, dato un campione classificato correttamente dalla foresta, la distanza minima (in termini di perturbazioni binarie sulle feature) che è necessario percorrere nello spazio delle feature per ottenere una classificazione diversa.
+Questo progetto implementa un sistema per il calcolo della **robustezza** di un classificatore *Random Forest* su dati multiclasse.
 
 Il progetto si sviluppa in due componenti principali:
 
-1. **`Random_Forest_Aeon_Univariate/`** — componente del professore: addestra una Random Forest su dataset di serie temporali univariate (tramite la libreria [Aeon](https://www.aeon-toolkit.org/)) e serializza la foresta, i campioni di test e l'*endpoint universe* in formato JSON.
-2. **`src/robustness/`** — componente sviluppata in questo lavoro: legge i file prodotti dal componente precedente e calcola la robustezza applicando il *Tableau Method* su una formula Booleana che codifica la foresta.
+1. **`Random_Forest_Aeon_Univariate/`** — componente per generare random forest su dataset aeon. 
+2. **`src/robustness/`** — legge i file prodotti dal componente precedente e calcola la robustezza applicando il *Tableau Method* su una formula Booleana che codifica la foresta.
 
 ---
-
-## Background teorico
-
-### Random Forest
-
-Una *Random Forest* è un insieme di $n$ alberi decisionali $\{T_1, \ldots, T_n\}$, ognuno dei quali partiziona lo spazio delle feature tramite soglie sulle variabili di input. La predizione della foresta è determinata dal voto di maggioranza fra le predizioni dei singoli alberi.
-
-Ogni cammino radice-foglia in un albero $T_i$ definisce una congiunzione di condizioni booleane della forma $x_j \leq \theta$ (ramo *low*) oppure $x_j > \theta$ (ramo *high*).
 
 ### Endpoint Universe
 
@@ -35,33 +27,11 @@ PSF = (l₁₁ ∧ l₁₂ ∧ … ∧ cK₁) ∨ (l₂₁ ∧ l₂₂ ∧ … �
 
 dove ogni `lᵢⱼ` è un letterale su una variabile di feature (o la sua negazione) e `cKᵢ` è la variabile di **classe** associata alla foglia (ad esempio `c1` per la classe `1`).
 
-La conversione è implementata in `src/robustness/domain/mappers/rf.py`:
-
-```python
-# src/robustness/domain/mappers/rf.py
-
-def rf_to_formula_str(rf: _RF_Type) -> str:
-    # Per ogni albero, enumera tutti i cammini radice-foglia
-    groups = [c for tree in rf for c in dt_to_formula_str(tree.root)]
-    # Ogni cammino diventa una congiunzione di letterali
-    and_expr = [" & ".join(reversed(group)) for group in groups]
-    # La PSF è la disgiunzione di tutti i cammini
-    formula = f"({") | (".join(and_expr)})"
-    return formula
-
-def dt_to_formula_str(root: _DT_Node_Type) -> list[list[str]]:
-    if isinstance(root, _DT_Internal_Type):
-        low_condition  = f"(! {root.feature})"   # feature <= EU[feature] → bit 0
-        high_condition = root.feature              # feature >  EU[feature] → bit 1
-        # ricorsione sui figli e aggiunta della condizione corrente
-        ...
-    if isinstance(root, _DT_Leaf_Type):
-        return [[f"c{root.label}"]]               # variabile di classe
-```
 
 ### Ordered Binary Decision Diagram (OBDD)
 
 Un **OBDD** (*Ordered Binary Decision Diagram*) è una rappresentazione compatta e canonica di una funzione booleana. I nodi interni sono etichettati con variabili booleane e hanno due archi figli: *low* (variabile = 0) e *high* (variabile = 1). I nodi terminali sono `True` (⊤) e `False` (⊥).
+Nel progetto è stata utilizzata la libreria `dd` per gestire gli OBDD.
 
 Esempio di OBDD per la formula `(x1 ∧ ¬x2) ∨ (¬x1 ∧ x2)` (XOR):
 
@@ -81,11 +51,10 @@ graph TD
     x2b -->|"1"| F
 ```
 
-La dimensione di un OBDD è misurata dal numero di nodi nel DAG (`dag_size`). La gestione degli OBDD è affidata alla libreria [`dd`](https://github.com/tulip-control/dd).
 
 ### Riduzione parziale della PSF (`partial_reduce`)
 
-Poiché la PSF può essere molto grande, non è sempre possibile ridurla direttamente a un singolo OBDD. La funzione `partial_reduce` applica un approccio **bottom-up**: visita l'AST della formula in post-ordine e converte i sottoalberi in OBDD solo se la dimensione risultante è al di sotto del parametro `diagram_size`. Se la dimensione supera la soglia, il nodo rimane nella forma simbolica (AST).
+Poiché la PSF può essere molto grande, non è sempre possibile ridurla direttamente a un singolo OBDD. La funzione `partial_reduce` applica un approccio **bottom-up**: visita l'albero della formula in post-ordine e converte i sottoalberi in OBDD solo se la dimensione risultante è al di sotto del parametro `diagram_size`. Se la dimensione supera la soglia, il nodo mantiene la sua forma.
 
 `partial_reduce` può anche ricevere un'assegnazione parziale di variabili: in tal caso specializza la formula applicando l'assegnazione prima della riduzione.
 
@@ -146,32 +115,32 @@ Implementazione del loop principale del tableau:
 # src/robustness/domain/psf/operations.py
 
 def tableau_method(f: PSF) -> TableauTree:
-    tree = tb.Builder()
-    root = tree.add_tree(f, "Initial Reduced-PSF")
-    frontier = deque([root])
+   tree = tb.Builder()
+   root = tree.add_tree(f, "Initial Reduced-PSF")
+   frontier = deque([root])
 
-    while frontier:
-        current = frontier.pop()
-        current_tree = tree.T.nodes[current]['tree']
+   while frontier:
+      current = frontier.pop()
+      current_tree = tree.current_psf.nodes[current]['tree']
 
-        if is_bdd(current_tree):
-            continue                          # foglia: già un OBDD
+      if is_bdd(current_tree):
+         continue  # foglia: già un OBDD
 
-        best_var, _ = best_feature(current_tree)  # variabile più frequente
+      best_var, _ = best_feature(current_tree)  # variabile più frequente
 
-        # Ramo low: assegna best_var = False
-        low_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: False})
-        low_id = tree.add_tree(low_tree, best_feature(low_tree)[0])
-        tree.assign(current, low_id, best_var, False)
-        frontier.append(low_id)
+      # Ramo low: assegna best_var = False
+      low_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: False})
+      low_id = tree.add_tree(low_tree, best_feature(low_tree)[0])
+      tree.assign(current, low_id, best_var, False)
+      frontier.append(low_id)
 
-        # Ramo high: assegna best_var = True
-        high_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: True})
-        high_id = tree.add_tree(high_tree, best_feature(high_tree)[0])
-        tree.assign(current, high_id, best_var, True)
-        frontier.append(high_id)
+      # Ramo high: assegna best_var = True
+      high_tree, _ = partial_reduce(current_tree, config.diagram_size, {best_var: True})
+      high_id = tree.add_tree(high_tree, best_feature(high_tree)[0])
+      tree.assign(current, high_id, best_var, True)
+      frontier.append(high_id)
 
-    return tree.build()
+   return tree.build()
 ```
 
 ### Calcolo della robustezza su un OBDD

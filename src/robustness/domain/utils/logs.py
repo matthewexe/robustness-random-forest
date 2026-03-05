@@ -8,6 +8,7 @@ def init_dir(path: str, cleanup: bool = True) -> None:
 
     os.makedirs(path)
 
+
 def init_log_dirs() -> None:
     init_dir("logs", cleanup=False)
     init_dir("logs/bdds")

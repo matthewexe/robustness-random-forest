@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from collections import deque
-from typing import Any
-
 import networkx as nx
 
-from robustness.domain.psf.model import is_terminal
 from robustness.domain.tree.model import BinaryTree
 
 

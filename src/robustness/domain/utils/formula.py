@@ -46,6 +46,7 @@ def is_class(variable_name: str) -> bool:
     import re
     return re.match(r"^(c)?(_|-)?\d+$", variable_name) is not None
 
+
 def get_class_label(variable_name: str) -> str:
     """
     Remove class prefix from the variable name and return the class label.
@@ -60,6 +61,7 @@ def get_class_label(variable_name: str) -> str:
         return variable_name
 
     return variable_name[1:]
+
 
 def filter_features(variables: Iterable[str]) -> set[str]:
     config = Config()
@@ -82,7 +84,7 @@ def get_leaves(psf: PSF) -> list[tuple[int, dict]]:
     final_nodes = list()
     for n, attrs in psf.nodes(data=True):
         if is_terminal(attrs['kind']):
-            final_nodes.append((n,attrs))
+            final_nodes.append((n, attrs))
     return final_nodes
 
 

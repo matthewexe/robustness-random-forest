@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import abc
 import dataclasses
 import datetime
@@ -54,12 +55,12 @@ class InternalNode(Node):
     value: float
 
     def __init__(
-        self,
-        low_child: Node,
-        high_child: Node,
-        feature: str,
-        value: float,
-        parent: Node | None = None,
+            self,
+            low_child: Node,
+            high_child: Node,
+            feature: str,
+            value: float,
+            parent: Node | None = None,
     ) -> None:
         super().__init__(parent)
         logger.debug(f"Creating InternalNode: feature={feature}, value={value}")
@@ -77,10 +78,10 @@ class InternalNode(Node):
             return False
 
         return (
-            value.low_child == self.low_child
-            and value.high_child == self.high_child
-            and value.feature == self.feature
-            and value.value == self.value
+                value.low_child == self.low_child
+                and value.high_child == self.high_child
+                and value.feature == self.feature
+                and value.value == self.value
         )
 
 
@@ -99,10 +100,10 @@ class LeafNode(Node):
     label: str
 
     def __init__(
-        self,
-        leaf_id: int,
-        label: str,
-        parent: Node | None = None,
+            self,
+            leaf_id: int,
+            label: str,
+            parent: Node | None = None,
     ) -> None:
         super().__init__(parent)
         logger.debug(f"Creating LeafNode: leaf_id={leaf_id}, label={label}")
@@ -111,10 +112,11 @@ class LeafNode(Node):
 
     def __eq__(self, value: object) -> bool:
         return (
-            isinstance(value, LeafNode)
-            and value.label == self.label
-            and value.leaf_id == self.leaf_id
+                isinstance(value, LeafNode)
+                and value.label == self.label
+                and value.leaf_id == self.leaf_id
         )
+
 
 class DecisionTree:
     """
@@ -143,6 +145,7 @@ class DecisionTree:
 class RandomForest(list[DecisionTree]):
     pass
 
+
 # Sample used for training
 @dataclasses.dataclass
 class Sample:
@@ -159,5 +162,6 @@ class Sample:
         sample_id = self.sample_id
         group = self.group
         return f"Sample({group=}, {sample_id=})"
+
 
 Endpoints: TypeAlias = dict[str, float]

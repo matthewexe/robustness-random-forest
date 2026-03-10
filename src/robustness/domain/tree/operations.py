@@ -5,7 +5,7 @@ import networkx as nx
 from robustness.domain.tree.model import BinaryTree
 
 
-def remove_unconnected_nodes(graph: BinaryTree, root: int) -> BinaryTree:
+def remove_unreachable_nodes_from[T: BinaryTree, R: BinaryTree](graph: T, root: int) -> R:
     """
 
     Clean a directed graph by removing nodes not reachable from the root.

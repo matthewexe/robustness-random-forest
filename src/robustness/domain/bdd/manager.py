@@ -51,13 +51,13 @@ def declare_vars(bdd: DD_Manager, formula: "robustness.domain.types._PSF_Type"):
     classes = get_classes(formula)
     if config.debug_mode:
         all_variables = list(sorted(variables)) + list(sorted(classes))
-        logger.debug(f"Variables to declare: {sorted(variables)}")
-        logger.debug(f"Classes to declare: {sorted(classes)}")
+        logger.info(f"Variables to declare: {sorted(variables)}")
+        logger.info(f"Classes to declare: {sorted(classes)}")
     else:
         all_variables = variables | classes
 
     logger.debug(f"Declaring {len(all_variables)} variables in BDD manager: {", ".join(all_variables)}")
-    bdd.declare(*variables, *classes)
+    bdd.declare(*all_variables)
     logger.info(f"Successfully declared {len(all_variables)} variables")
     return bdd
 

@@ -1,10 +1,11 @@
-from os import PathLike
 from typing import override, Iterator
 
 import networkx as nx
 
+from robustness.domain.nx_wrapper import BaseDiGraph
 
-class BinaryTree(nx.DiGraph):
+
+class BinaryTree(BaseDiGraph):
     """
     Networkx directed graph wrapper that represents a binary tree.
     """
@@ -68,9 +69,3 @@ class BinaryTree(nx.DiGraph):
     @property
     def leaves(self) -> Iterator[int]:
         return (node for node in self.nodes if self.out_degree[node] == 0)
-
-    def save_svg(self, path: PathLike | str):
-        import networkx as nx
-
-        A = nx.nx_agraph.to_agraph(self)
-        A.draw(path, format='svg', prog='dot')

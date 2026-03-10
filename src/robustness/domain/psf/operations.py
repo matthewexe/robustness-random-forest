@@ -13,7 +13,7 @@ from robustness.domain.mappers.bdd import calculate_bdd_robustness
 from robustness.domain.psf.model import PSF, Kind, Builder, is_bdd, render_formula
 from robustness.domain.psf.tableau.model import TableauTree
 from robustness.domain.random_forest import Sample, Endpoints
-from robustness.domain.tree.operations import remove_unconnected_nodes
+from robustness.domain.tree.operations import remove_unreachable_nodes_from
 from robustness.domain.utils.metrics import log_perf_counter
 
 logger = get_logger(__name__)
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 @log_perf_counter
 def partial_reduce(
-    psf: PSF, diagram_size: int, assignment: dict[str, bool] | None = None
+        psf: PSF, diagram_size: int, assignment: dict[str, bool] | None = None
 ) -> tuple[PSF, bool]:
     """
     Try to reduce the PSF formula by applying the given variable assignment and
@@ -155,7 +155,7 @@ def partial_reduce(
     During the building process, some bdds might not be connected due to the fact that 
     they could be reduced more and they will not be connected in future iterations.
     """
-    reduced_tree: PSF = remove_unconnected_nodes(built_tree, root)
+    reduced_tree: PSF = remove_unreachable_nodes_from(built_tree, root)
     return reduced_tree, last_outcome
 
 
@@ -229,8 +229,6 @@ def tableau_method(f: PSF) -> TableauTree:
 
         if is_bdd(current_psf):
             logger.info(f"BDD found")
-            if config.log_graphs:
-                log_psf(current_psf, f"{current}_bdd.svg")
             continue
 
         # Find best var
@@ -246,7 +244,7 @@ def tableau_method(f: PSF) -> TableauTree:
         frontier.append(low_id)
 
         if config.log_graphs:
-            log_psf(low_tree, f"{low_id}_low_{current}_{best_var}.svg")
+            log_psf(low_tree, f"{low_id}.svg")
 
         # High tree iter
         high_tree, _ = partial_reduce(
@@ -257,7 +255,7 @@ def tableau_method(f: PSF) -> TableauTree:
         frontier.append(high_id)
 
         if config.log_graphs:
-            log_psf(high_tree, f"{high_id}_high_{current}_{best_var}.svg")
+            log_psf(high_tree, f"{high_id}.svg")
 
     build = tree.build()
 
@@ -307,10 +305,10 @@ def robustness(t: TableauTree, sample: Sample, endpoints: Endpoints) -> int:
 
 
 def generate_robustness_graph(
-    t: TableauTree,
-    sample: Sample,
-    endpoints: Endpoints,
-    filename: PathLike | str = "robustness_report.dot",
+        t: TableauTree,
+        sample: Sample,
+        endpoints: Endpoints,
+        filename: PathLike | str = "robustness_report.dot",
 ) -> None:
     """
     Used to generate a graphviz representation of the tableau tree with cost path based on sample.

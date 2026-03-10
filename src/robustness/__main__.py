@@ -2,6 +2,7 @@ import argparse
 
 import robustness.transformers.rf as rftrans
 from robustness.adapters.rf_service import RandomForestService
+from robustness.domain.bdd.manager import get_bdd_manager, declare_vars
 from robustness.domain.config import Config
 from robustness.domain.logging import get_logger
 from robustness.domain.mappers.psf import from_formula_str
@@ -18,14 +19,6 @@ def main():
         logger.info("Robustness application completed successfully")
         logger.info("Starting robustness application")
         parser = argparse.ArgumentParser(description="Esempio di CLI completa con argparse")
-
-        # Output filename
-        parser.add_argument(
-            "-o",
-            "--output",
-            help="Nome del file di output (default: out.txt)",
-            default="out.txt",
-        )
 
         # Random forest options
         parser.add_argument(
@@ -99,6 +92,8 @@ def main():
 
         # Init bdd manager variables
         logger.info("Initializing BDD manager and declaring variables")
+        bdd_manager = get_bdd_manager()
+        declare_vars(bdd_manager, psf)
         logger.debug("BDD manager variables declared")
 
         # First partial reduction

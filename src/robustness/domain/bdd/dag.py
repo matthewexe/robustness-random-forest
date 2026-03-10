@@ -5,11 +5,12 @@ import networkx as nx
 from robustness.domain.bdd import DD_Function, DD_Manager
 from robustness.domain.bdd.manager import get_bdd_manager
 from robustness.domain.logging import get_logger
+from robustness.domain.nx_wrapper import BaseDiGraph
 
 logger = get_logger(__name__)
 
 
-class BddDag(nx.DiGraph):
+class BddDag(BaseDiGraph):
     """
     Networkx directed graph wrapper that represents an OBDD
     """
@@ -30,21 +31,35 @@ class BddDag(nx.DiGraph):
         del attrs['label']
         super().add_node(node_for_adding, label=f"{label}[{node_for_adding}]", **attrs)
 
-    def add_indexed_edge(self, parent: int, child: int, index: int, weight: float = 1, label: str = "", **attrs):
+    def set_edge_weight(self, parent: int, child: int, weight: float):
+        if self.has_edge(parent, child):
+            self.edges[parent, child]['weight'] = weight
+            self.edges[parent, child]['label'] = f"{self.edges[parent, child]['label'].split('[')[0]}[c={weight}]"
+        else:
+            logger.warning(f"Trying to set weight of non existing edge ({parent}, {child})")
+
+    def add_indexed_edge(self, parent: int, child: int, index: int, weight: float = 1, label: str = ""):
+        edges_to_remove = set()
         for edge in self.out_edges(parent):
             edge_parent, edge_child = edge
             edge_index = self.edges[edge_parent, edge_child]['index']
-            if edge_index == index and child != edge_child:
-                logger.warning(f"Switch indexed edge {index} of {parent} node with {child} child node")
-                self.remove_edge(edge_parent, edge_child)
+            if edge_index == index:
+                # self.remove_edge(edge_parent, edge_child)
+                edges_to_remove.add((edge_parent, edge_child))
 
-        self.add_edge(parent, child, weight=weight, index=index, label=f"{label}[{weight}]")
+        for (p, c) in edges_to_remove:
+            self.remove_edge(p, c)
+
+        self.add_edge(parent, child, weight=weight, index=index, label=f"{label}[c={weight}]")
 
     def set_low(self, parent: int, child: int, weight: float = 1) -> None:
         self.add_indexed_edge(parent, child, index=0, weight=weight, label="low")
 
     def set_high(self, parent: int, child: int, weight: float = 1) -> None:
         self.add_indexed_edge(parent, child, index=1, weight=weight, label="high")
+
+    def get_var_of(self, node_id: int) -> str:
+        return self.nodes[node_id]['value']
 
     def get_indexed_child(self, parent: int, index: int) -> int | None:
         for edge in self.out_edges(parent):

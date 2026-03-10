@@ -1,3 +1,6 @@
+import math
+from collections import deque
+
 import networkx as nx
 
 from robustness.domain.bdd import DD_Function, DD_Manager
@@ -30,68 +33,47 @@ def to_dag(manager: DD_Manager, bdd: DD_Function) -> BddDag:
     return b.build()
 
 
-def construct_robustness_dag(manager: DD_Manager, bdd: DD_Function, sample: Sample, path: str):
+def construct_robustness_dag(manager: DD_Manager, bdd: DD_Function, sample: Sample, endpoints: Endpoints) -> BddDag:
     dag = to_dag(manager, bdd)
 
-    current = dag.root
-    while not dag.is_terminal(current):
-        attr = dag.nodes[current]
-        choice, path = path[-1], path[:-1]
-
-        if not path:
-            break
-        value = attr['value']
-        if is_class(value) and sample.predicted_label == get_class_label(value):
+    frontier = deque()
+    frontier.append(dag.root)
+    # DFS
+    while frontier:
+        current = frontier.pop()
+        if current in (dag.false(), dag.true()):
             continue
 
-        if choice == "0":
-            next_node = dag.low(current)
-            dag.remove_edge(current, next_node)
-            dag.set_low(current, next_node, weight=0)
-        else:
-            next_node = dag.high(current)
-            dag.remove_edge(current, next_node)
-            dag.set_high(current, next_node, weight=0)
+        for child in dag.successors(current):
+            frontier.append(child)
 
-        current = next_node
+        var = dag.get_var_of(current)
+
+        if is_class(var):
+            # Remove high edge from predicted class nodes
+            if get_class_label(var) == sample.predicted_label:
+                current_child = dag.high(current)
+                if current_child is not None:  # Could be None if it's deleted in previous iterations
+                    dag.set_high(current, current_child, weight=math.inf)
+            else:  # Set not predicted class low edges as 0 weighted edge
+                current_child = dag.low(current)
+                dag.set_low(current, current_child, weight=0)
+        else:
+            # Set 0 weighted edges
+            if sample.features[var] <= endpoints[var]:
+                current_child = dag.low(current)
+                # dag.remove_edge(current, current_child)
+                dag.set_low(current, current_child, weight=0)
+            else:
+                current_child = dag.high(current)
+                # dag.remove_edge(current, current_child)
+                dag.set_high(current, current_child, weight=0)
 
     # Set in edges weight of False node to infinity
-    import math
     for u, v, data in dag.in_edges(dag.false(), data=True):
-        dag.add_indexed_edge(u, v, index=data['index'], weight=math.inf, label=data['label'])
+        dag.set_edge_weight(u, v, weight=math.inf)
 
-    return remove_class_from_dag(sample.predicted_label, dag)
-
-
-def remove_class_from_dag(class_label: str, dag: BddDag) -> BddDag:
-    """
-    It removes all edges from nodes that represent the predicted class to their high child.
-
-    Args:
-        class_label: the predicted class label to remove from the
-        dag: the DAG to modify
-
-    Returns: a new DAG with the specified class removed
-
-    """
-    new_dag = dag.copy()
-
-    edges_to_remove = set()
-
-    for node in new_dag.nodes:
-        attr = new_dag.nodes[node]
-        value = attr['value']
-        if not is_class(value) or get_class_label(value) != class_label:
-            continue
-
-        high_child = new_dag.high(node)
-        edges_to_remove.add((node, high_child))
-
-    for edge in edges_to_remove:
-        parent, child = edge
-        new_dag.remove_edge(parent, child)
-
-    return new_dag
+    return dag
 
 
 def calculate_bdd_robustness(f: DD_Function, sample: Sample, endpoints: Endpoints) -> float:
@@ -114,12 +96,10 @@ def calculate_bdd_robustness(f: DD_Function, sample: Sample, endpoints: Endpoint
         import math
         return math.inf
 
-    path = test_sample(sample, manager, f, endpoints)
-    dag = construct_robustness_dag(manager, f, sample, path)
+    dag = construct_robustness_dag(manager, f, sample, endpoints)
 
     if config.log_graphs:
-        from networkx.drawing.nx_agraph import write_dot
-        write_dot(dag, f"logs/robustness/bdd_dags/{int(f)}_robustness_dag.dot")
+        dag.save_svg(f"logs/robustness/bdd_dags/{int(f)}_robustness_dag.svg")
 
     shortest_path = nx.shortest_path(dag, dag.root, dag.true(), weight="weight")
     logger.debug(f"Shortest path for {int(f)}: {", ".join(map(str, shortest_path))}")
@@ -132,5 +112,7 @@ def calculate_bdd_robustness(f: DD_Function, sample: Sample, endpoints: Endpoint
             path_weight += dag[u][v].get('weight', 1)
         else:
             raise ValueError(f"Edge ({u}, {v}) does not exist in the graph.")
+
+    logger.info(f"Calculated robustness for BDD {int(f)}: {shortest_path}")
 
     return path_weight

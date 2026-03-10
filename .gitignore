@@ -46,3 +46,4 @@ logs/
 bdds/
 *.dot
 *.json
+notebooks/
